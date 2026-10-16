@@ -1,0 +1,2355 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>VaultLedger 专属离线理财管家</title>
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="theme-color" content="#0f172a">
+
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com/3.4.17"></script>
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1"></script>
+
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50: '#ecfdf5',
+              100: '#d1fae5',
+              500: '#10b981',
+              600: '#059669',
+              700: '#047857',
+            },
+            darkbg: '#0f172a',
+            surface: '#1e293b',
+            surface2: '#334155'
+          }
+        }
+      }
+    }
+  </script>
+
+  <style>
+    * {
+      -webkit-tap-highlight-color: transparent;
+      user-select: none;
+    }
+    input, textarea, select {
+      user-select: text;
+    }
+    .no-scrollbar::-webkit-scrollbar {
+      display: none;
+    }
+    .no-scrollbar {
+      -ms-overflow-style: none;
+      scrollbar-width: none;
+    }
+    @keyframes pulseHighlight {
+      0% { background-color: rgba(16, 185, 129, 0.25); }
+      100% { background-color: rgba(30, 41, 59, 1); }
+    }
+    .new-tx-highlight {
+      animation: pulseHighlight 2s ease-out;
+    }
+  </style>
+</head>
+<body class="bg-slate-950 text-slate-100 font-sans antialiased min-h-screen flex flex-col justify-between selection:bg-emerald-500 selection:text-white">
+
+  <!-- PIN LOCK OVERLAY -->
+  <div id="pinLockModal" class="fixed inset-0 z-50 bg-slate-950 flex flex-col items-center justify-between p-6 transition-all duration-300">
+    <div class="w-full max-w-sm flex justify-between items-center pt-8">
+      <div class="flex items-center space-x-2">
+        <div class="w-8 h-8 rounded-xl bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-400 font-bold text-lg">
+          VL
+        </div>
+        <span class="text-sm font-semibold tracking-wider text-slate-400 uppercase">VaultLedger</span>
+      </div>
+      <button id="pinResetBtn" class="text-xs text-slate-500 hover:text-slate-300 py-1 px-2.5 rounded-lg border border-slate-800">
+        重置为 1234
+      </button>
+    </div>
+
+    <div class="w-full max-w-xs flex flex-col items-center my-auto">
+      <div class="w-16 h-16 rounded-2xl bg-slate-900 border border-slate-800 flex items-center justify-center mb-6 shadow-xl">
+        <svg class="w-8 h-8 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
+        </svg>
+      </div>
+      <h2 id="pinTitle" class="text-xl font-bold text-white mb-2 tracking-tight">输入独立 PIN 码</h2>
+      <p id="pinSub" class="text-xs text-slate-400 mb-6 text-center">纯本地安全离线存储 · 默认 PIN: 1234</p>
+      
+      <!-- PIN Dots -->
+      <div class="flex space-x-4 mb-8" id="pinDots">
+        <div class="w-4 h-4 rounded-full border-2 border-slate-700 transition-all duration-200"></div>
+        <div class="w-4 h-4 rounded-full border-2 border-slate-700 transition-all duration-200"></div>
+        <div class="w-4 h-4 rounded-full border-2 border-slate-700 transition-all duration-200"></div>
+        <div class="w-4 h-4 rounded-full border-2 border-slate-700 transition-all duration-200"></div>
+      </div>
+      <p id="pinError" class="text-xs text-rose-400 font-medium h-4 mb-2"></p>
+    </div>
+
+    <!-- PIN Keypad -->
+    <div class="w-full max-w-xs grid grid-cols-3 gap-4 pb-6">
+      <button class="pin-key h-16 rounded-2xl bg-slate-900/90 active:bg-slate-800 border border-slate-800/80 text-xl font-semibold text-white shadow" data-num="1">1</button>
+      <button class="pin-key h-16 rounded-2xl bg-slate-900/90 active:bg-slate-800 border border-slate-800/80 text-xl font-semibold text-white shadow" data-num="2">2</button>
+      <button class="pin-key h-16 rounded-2xl bg-slate-900/90 active:bg-slate-800 border border-slate-800/80 text-xl font-semibold text-white shadow" data-num="3">3</button>
+      <button class="pin-key h-16 rounded-2xl bg-slate-900/90 active:bg-slate-800 border border-slate-800/80 text-xl font-semibold text-white shadow" data-num="4">4</button>
+      <button class="pin-key h-16 rounded-2xl bg-slate-900/90 active:bg-slate-800 border border-slate-800/80 text-xl font-semibold text-white shadow" data-num="5">5</button>
+      <button class="pin-key h-16 rounded-2xl bg-slate-900/90 active:bg-slate-800 border border-slate-800/80 text-xl font-semibold text-white shadow" data-num="6">6</button>
+      <button class="pin-key h-16 rounded-2xl bg-slate-900/90 active:bg-slate-800 border border-slate-800/80 text-xl font-semibold text-white shadow" data-num="7">7</button>
+      <button class="pin-key h-16 rounded-2xl bg-slate-900/90 active:bg-slate-800 border border-slate-800/80 text-xl font-semibold text-white shadow" data-num="8">8</button>
+      <button class="pin-key h-16 rounded-2xl bg-slate-900/90 active:bg-slate-800 border border-slate-800/80 text-xl font-semibold text-white shadow" data-num="9">9</button>
+      <button class="pin-key h-16 rounded-2xl text-xs text-slate-500 font-medium hover:text-slate-300" id="pinQuickFill">一键解锁</button>
+      <button class="pin-key h-16 rounded-2xl bg-slate-900/90 active:bg-slate-800 border border-slate-800/80 text-xl font-semibold text-white shadow" data-num="0">0</button>
+      <button class="pin-key h-16 rounded-2xl bg-slate-900/60 active:bg-slate-800 text-slate-400 flex items-center justify-center" id="pinBackspace">
+        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2M3 12l6.414-6.414A2 2 0 0110.828 5H20a2 2 0 012 2v10a2 2 0 01-2 2h-9.172a2 2 0 01-1.414-.586L3 12z"/>
+        </svg>
+      </button>
+    </div>
+  </div>
+
+  <!-- MAIN APP CONTAINER -->
+  <div class="w-full max-w-md mx-auto flex-1 flex flex-col pb-24 relative overflow-x-hidden min-h-screen border-x border-slate-900/60 bg-slate-950">
+
+    <!-- TOP APP BAR -->
+    <header class="sticky top-0 z-30 bg-slate-950/80 backdrop-blur-md border-b border-slate-900 px-4 py-3 flex items-center justify-between">
+      <div class="flex items-center space-x-2">
+        <div class="w-7 h-7 rounded-lg bg-emerald-500 flex items-center justify-center font-black text-slate-950 text-xs">
+          RM
+        </div>
+        <span class="font-bold text-base tracking-tight text-white">VaultLedger</span>
+        <span class="text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-mono">离线纯存</span>
+      </div>
+      <div class="flex items-center space-x-1.5">
+        <button id="lockAppBtn" title="锁定" class="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
+          </svg>
+        </button>
+        <button id="settingsBtn" title="数据备份与设置" class="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+          </svg>
+        </button>
+      </div>
+    </header>
+
+    <!-- CONTENT VIEWS -->
+
+    <!-- VIEW 1: 流水明细 (LEDGER) -->
+    <div id="viewLedger" class="app-view flex-1 flex flex-col px-4 pt-4">
+      <!-- Month Carousel Header -->
+      <div class="flex items-center justify-between bg-slate-900/90 border border-slate-800/90 rounded-2xl p-3 mb-4 shadow-sm">
+        <button id="prevMonthBtn" title="上个月" class="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-xl transition">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+        </button>
+        <div class="text-center cursor-pointer group" id="monthPickerTrigger" title="点击选择月份或查看全部">
+          <div class="flex items-center justify-center space-x-1.5">
+            <span id="currentMonthLabel" class="text-base font-bold text-white tracking-wide group-hover:text-emerald-400 transition">本月账目</span>
+            <span class="text-xs text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-lg border border-emerald-500/20">切换</span>
+          </div>
+          <span class="text-[10px] text-slate-400" id="monthSubLabel">点击直接选年月或看全部历史</span>
+        </div>
+        <button id="nextMonthBtn" title="下个月" class="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-xl transition">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+        </button>
+      </div>
+
+      <!-- Monthly Summary KPI Card -->
+      <div class="grid grid-cols-3 gap-2.5 mb-4">
+        <div class="bg-slate-900 border border-slate-800/80 rounded-2xl p-3 flex flex-col justify-between">
+          <span class="text-[11px] text-slate-400 font-medium">总收入</span>
+          <div class="text-sm font-extrabold text-emerald-400 mt-1 truncate" id="kpiIncome">RM 0.00</div>
+        </div>
+        <div class="bg-slate-900 border border-slate-800/80 rounded-2xl p-3 flex flex-col justify-between">
+          <span class="text-[11px] text-slate-400 font-medium">生活支出</span>
+          <div class="text-sm font-extrabold text-rose-400 mt-1 truncate" id="kpiExpense">RM 0.00</div>
+        </div>
+        <div class="bg-slate-900 border border-slate-800/80 rounded-2xl p-3 flex flex-col justify-between">
+          <span class="text-[11px] text-slate-400 font-medium">实际结余</span>
+          <div class="text-sm font-extrabold text-slate-100 mt-1 truncate" id="kpiBalance">RM 0.00</div>
+        </div>
+      </div>
+
+      <!-- Pending Reimbursement Banner (if any) -->
+      <div id="reimburseBanner" class="hidden mb-4 bg-amber-500/10 border border-amber-500/20 rounded-2xl p-3 flex items-center justify-between">
+        <div class="flex items-center space-x-2.5">
+          <div class="w-7 h-7 rounded-lg bg-amber-500/20 text-amber-400 flex items-center justify-center text-xs font-bold">待</div>
+          <div>
+            <div class="text-xs font-semibold text-amber-300">垫付待报销金额</div>
+            <div class="text-[11px] text-slate-400">已从卡扣除，默认不计入生活支出</div>
+          </div>
+        </div>
+        <span class="text-xs font-bold text-amber-400 font-mono" id="reimburseAmount">RM 0.00</span>
+      </div>
+
+      <!-- Filter Pills -->
+      <div class="flex items-center space-x-1.5 overflow-x-auto no-scrollbar pb-2 mb-3">
+        <button class="filter-pill active px-3 py-1.5 rounded-xl text-xs font-medium bg-emerald-500 text-slate-950 transition" data-filter="all">全部明细</button>
+        <button class="filter-pill px-3 py-1.5 rounded-xl text-xs font-medium bg-slate-900 text-slate-300 hover:bg-slate-800 transition" data-filter="expense">仅看支出</button>
+        <button class="filter-pill px-3 py-1.5 rounded-xl text-xs font-medium bg-slate-900 text-slate-300 hover:bg-slate-800 transition" data-filter="income">仅看收入</button>
+        <button class="filter-pill px-3 py-1.5 rounded-xl text-xs font-medium bg-slate-900 text-slate-300 hover:bg-slate-800 transition" data-filter="reimbursable">待报销</button>
+        <button class="filter-pill px-3 py-1.5 rounded-xl text-xs font-medium bg-slate-900 text-slate-300 hover:bg-slate-800 transition" data-filter="all_time" id="allTimeFilterBtn">全部历史</button>
+      </div>
+
+      <!-- Transactions List -->
+      <div id="transactionList" class="flex-1 space-y-3 pb-6">
+        <!-- Rendered dynamically -->
+      </div>
+    </div>
+
+    <!-- VIEW 2: 分账账户与平账 (ACCOUNTS) -->
+    <div id="viewAccounts" class="app-view hidden flex-1 flex flex-col px-4 pt-4">
+      <!-- Total Net Liquid Card -->
+      <div class="bg-gradient-to-br from-slate-900 via-slate-900 to-emerald-950/40 border border-emerald-500/20 rounded-3xl p-5 mb-5 shadow-lg">
+        <div class="flex justify-between items-start">
+          <span class="text-xs font-medium text-slate-400">流动总净资产 (活期 + 储蓄)</span>
+          <button id="addNewAccountBtn" class="text-xs text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-1 rounded-xl font-bold hover:bg-emerald-500/20 transition">+ 新增账户</button>
+        </div>
+        <div class="text-3xl font-black text-white mt-2 tracking-tight" id="netAssetAmount">RM 0.00</div>
+        
+        <div class="mt-4 pt-4 border-t border-slate-800/80 flex items-center justify-between">
+          <button id="quickTransferBtn" class="flex items-center space-x-1.5 text-xs font-semibold text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/20 px-3.5 py-2 rounded-xl transition">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"/></svg>
+            <span>内部互转资金</span>
+          </button>
+          <span class="text-[11px] text-slate-500">互转不计入收支统计</span>
+        </div>
+      </div>
+
+      <!-- Account Categories -->
+      <div class="space-y-4 pb-6">
+        <!-- Daily Floating Expense Accounts -->
+        <div>
+          <div class="flex items-center justify-between px-1 mb-2">
+            <span class="text-xs font-bold text-slate-400 uppercase tracking-wider">💳 流动日常花销账户</span>
+            <span class="text-[11px] text-slate-500" id="expenseAccountsSubtotal">RM 0.00</span>
+          </div>
+          <div class="space-y-2.5" id="expenseAccountsList">
+            <!-- Dynamic accounts -->
+          </div>
+        </div>
+
+        <!-- Stable Savings Accounts -->
+        <div>
+          <div class="flex items-center justify-between px-1 mb-2">
+            <span class="text-xs font-bold text-slate-400 uppercase tracking-wider">🏦 稳健储蓄储备</span>
+            <span class="text-[11px] text-slate-500" id="savingsAccountsSubtotal">RM 0.00</span>
+          </div>
+          <div class="space-y-2.5" id="savingsAccountsList">
+            <!-- Dynamic accounts -->
+          </div>
+        </div>
+
+        <!-- Investment & Term Deposit Section -->
+        <div>
+          <div class="flex items-center justify-between px-1 mb-2">
+            <span class="text-xs font-bold text-slate-400 uppercase tracking-wider">📈 定期存单与理财池 (未来扩展)</span>
+            <button id="addInvestmentBtn" class="text-xs text-emerald-400 hover:underline font-semibold">+ 新增定存</button>
+          </div>
+          <div class="space-y-2.5" id="investmentsList">
+            <!-- Dynamic investments -->
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- VIEW 3: 负债还款 PTPTN (DEBT) -->
+    <div id="viewDebt" class="app-view hidden flex-1 flex flex-col px-4 pt-4">
+      <div class="flex items-center justify-between mb-4">
+        <div>
+          <h2 class="text-lg font-bold text-white">助学贷款与负债管家</h2>
+          <p class="text-xs text-slate-400">实时追踪剩余本金，杜绝逾期与对账偏差</p>
+        </div>
+        <button id="calibrateDebtBtn" class="text-xs font-semibold text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/20 px-3 py-1.5 rounded-xl border border-emerald-500/20 transition">
+          ⚙ 校准本金
+        </button>
+      </div>
+
+      <!-- PTPTN Main Card -->
+      <div class="bg-slate-900 border border-slate-800 rounded-3xl p-5 mb-5 shadow-lg relative overflow-hidden">
+        <div class="flex items-center justify-between mb-4">
+          <div class="flex items-center space-x-2.5">
+            <div class="w-10 h-10 rounded-2xl bg-indigo-500/20 text-indigo-400 flex items-center justify-center font-bold text-lg">
+              🎓
+            </div>
+            <div>
+              <div class="font-bold text-base text-white">PTPTN 助学贷款</div>
+              <div class="text-[11px] text-slate-400">Ujrah 1% 服务费分期 · 25日还款</div>
+            </div>
+          </div>
+          <span class="text-[11px] px-2.5 py-1 rounded-full bg-slate-800 text-slate-300 font-mono">还款中</span>
+        </div>
+
+        <!-- Debt Progress Bar -->
+        <div class="mb-4">
+          <div class="flex justify-between items-baseline mb-1.5">
+            <span class="text-xs text-slate-400 font-medium">已还清进度</span>
+            <span class="text-xs font-bold text-emerald-400 font-mono" id="ptptnPercent">35.0%</span>
+          </div>
+          <div class="w-full h-3 bg-slate-950 rounded-full overflow-hidden p-0.5 border border-slate-800">
+            <div id="ptptnProgressBar" class="h-full bg-gradient-to-r from-emerald-500 to-teal-400 rounded-full transition-all duration-500" style="width: 35%;"></div>
+          </div>
+        </div>
+
+        <!-- Big Metric Matrix -->
+        <div class="grid grid-cols-2 gap-3 mb-5">
+          <div class="bg-slate-950/70 border border-slate-800/80 rounded-2xl p-3">
+            <div class="text-[11px] text-slate-400">剩余待还本金</div>
+            <div class="text-xl font-black text-rose-400 mt-1 font-mono" id="ptptnRemaining">RM 19,500.00</div>
+          </div>
+          <div class="bg-slate-950/70 border border-slate-800/80 rounded-2xl p-3">
+            <div class="text-[11px] text-slate-400">初始贷款总额</div>
+            <div class="text-xl font-bold text-slate-200 mt-1 font-mono" id="ptptnTotal">RM 30,000.00</div>
+          </div>
+        </div>
+
+        <!-- Monthly Due Reminder Box -->
+        <div class="bg-indigo-950/30 border border-indigo-500/20 rounded-2xl p-4 flex flex-col space-y-3">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center space-x-2">
+              <span class="text-base">🔔</span>
+              <span class="text-xs font-bold text-indigo-300">本月还款倒计时</span>
+            </div>
+            <span class="text-xs font-bold text-indigo-400 font-mono" id="ptptnDueReminder">每月 25 日</span>
+          </div>
+
+          <div class="flex items-center justify-between pt-1">
+            <span class="text-xs text-slate-300">固定还款额: <strong class="text-white font-mono" id="ptptnMonthlyAmount">RM 150.00</strong></span>
+            <button id="quickPayPtptnBtn" class="bg-emerald-500 hover:bg-emerald-400 active:scale-95 text-slate-950 font-bold text-xs px-4 py-2 rounded-xl transition shadow-md flex items-center space-x-1">
+              <span>一键记录还款</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Debt Repayment Records -->
+      <div class="flex-1 pb-6">
+        <div class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2.5 px-1">近期还款流水记录</div>
+        <div id="debtHistoryList" class="space-y-2">
+          <!-- Dynamic debt logs -->
+        </div>
+      </div>
+    </div>
+
+    <!-- VIEW 4: 图表分析与报销 (ANALYTICS) -->
+    <div id="viewAnalytics" class="app-view hidden flex-1 flex flex-col px-4 pt-4">
+      <div class="flex items-center justify-between mb-4">
+        <div>
+          <h2 class="text-lg font-bold text-white">图表洞察与报销管理</h2>
+          <p class="text-xs text-slate-400" id="analyticsMonthLabel">消费全景透视</p>
+        </div>
+        <div class="flex space-x-1">
+          <button id="analyticsChartTabBtn" class="px-2.5 py-1 rounded-lg text-xs font-semibold bg-emerald-500 text-slate-950">图表</button>
+          <button id="analyticsReimburseTabBtn" class="px-2.5 py-1 rounded-lg text-xs font-semibold bg-slate-900 text-slate-400">报销池</button>
+        </div>
+      </div>
+
+      <!-- SECTION A: CHARTS -->
+      <div id="analyticsChartsSection" class="space-y-5 pb-6">
+        <!-- Doughnut: Category Share -->
+        <div class="bg-slate-900 border border-slate-800 rounded-3xl p-4 shadow-sm">
+          <div class="flex justify-between items-center mb-3">
+            <span class="text-xs font-bold text-slate-300">分类支出占比</span>
+            <span class="text-[11px] text-slate-500">点击环形可筛选</span>
+          </div>
+          <div class="relative h-64 w-full flex items-center justify-center">
+            <canvas id="categoryChart"></canvas>
+          </div>
+        </div>
+
+        <!-- Horizontal Bar: Merchant Top 5 -->
+        <div class="bg-slate-900 border border-slate-800 rounded-3xl p-4 shadow-sm">
+          <div class="flex justify-between items-center mb-3">
+            <span class="text-xs font-bold text-slate-300">高频商家支出 TOP 5</span>
+            <span class="text-[11px] text-emerald-400">明细流洞察</span>
+          </div>
+          <div class="relative h-56 w-full">
+            <canvas id="merchantChart"></canvas>
+          </div>
+        </div>
+
+        <!-- Savings Rate & Monthly Trend -->
+        <div class="bg-slate-900 border border-slate-800 rounded-3xl p-4 shadow-sm">
+          <div class="flex justify-between items-center mb-1">
+            <span class="text-xs font-bold text-slate-300">收支与储蓄率趋势</span>
+            <span class="text-xs font-bold text-emerald-400" id="currentSavingsRateBadge">储蓄率: 0.0%</span>
+          </div>
+          <p class="text-[10px] text-slate-400 mb-3">绿色为收入，红色为生活支出</p>
+          <div class="relative h-60 w-full">
+            <canvas id="trendChart"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <!-- SECTION B: REIMBURSEMENT POOL -->
+      <div id="analyticsReimburseSection" class="hidden space-y-4 pb-6">
+        <div class="bg-slate-900 border border-slate-800 rounded-3xl p-4">
+          <div class="flex justify-between items-center">
+            <div>
+              <span class="text-xs text-slate-400">待公司报销总额</span>
+              <div class="text-2xl font-black text-amber-400 mt-1 font-mono" id="reimbursePoolTotal">RM 0.00</div>
+            </div>
+            <button id="batchSettleReimburseBtn" class="bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs px-3.5 py-2 rounded-xl transition">
+              一键核销入账
+            </button>
+          </div>
+          <p class="text-[11px] text-slate-400 mt-3 border-t border-slate-800 pt-2">
+            💡 核销打款时钱款将补入你选定的银行卡，且<strong>不会被重复计入日常工资收入</strong>。
+          </p>
+        </div>
+
+        <div class="space-y-2.5" id="pendingReimburseList">
+          <!-- Dynamic pending items -->
+        </div>
+      </div>
+    </div>
+
+    <!-- BOTTOM FLOATING ACTION BUTTON (QUICK ADD) -->
+    <div class="fixed bottom-20 left-1/2 -translate-x-1/2 z-40">
+      <button id="openQuickAddBtn" class="w-14 h-14 rounded-full bg-gradient-to-tr from-emerald-500 to-teal-400 hover:from-emerald-400 hover:to-teal-300 text-slate-950 shadow-xl shadow-emerald-500/25 flex items-center justify-center active:scale-95 transition transform">
+        <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4"/>
+        </svg>
+      </button>
+    </div>
+
+    <!-- BOTTOM NAVIGATION BAR (4 TABS) -->
+    <nav class="fixed bottom-0 left-0 right-0 z-30 bg-slate-950/90 backdrop-blur-lg border-t border-slate-900 py-2">
+      <div class="max-w-md mx-auto grid grid-cols-4 px-3">
+        <button class="nav-btn active flex flex-col items-center py-1 text-emerald-400 transition" data-view="viewLedger">
+          <svg class="w-5 h-5 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
+          <span class="text-[10px] font-semibold">明细</span>
+        </button>
+        <button class="nav-btn flex flex-col items-center py-1 text-slate-400 hover:text-slate-200 transition" data-view="viewAccounts">
+          <svg class="w-5 h-5 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z"/></svg>
+          <span class="text-[10px] font-semibold">分账</span>
+        </button>
+        <button class="nav-btn flex flex-col items-center py-1 text-slate-400 hover:text-slate-200 transition" data-view="viewDebt">
+          <svg class="w-5 h-5 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+          <span class="text-[10px] font-semibold">负债还款</span>
+        </button>
+        <button class="nav-btn flex flex-col items-center py-1 text-slate-400 hover:text-slate-200 transition" data-view="viewAnalytics">
+          <svg class="w-5 h-5 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 3.055A9.001 9.001 0 1020.945 13H11V3.055z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.488 9H15V3.512A9.025 9.025 0 0120.488 9z"/></svg>
+          <span class="text-[10px] font-semibold">图表</span>
+        </button>
+      </div>
+    </nav>
+  </div>
+
+  <!-- MONTH & YEAR PICKER MODAL -->
+  <div id="monthPickerModal" class="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm hidden flex items-center justify-center p-4">
+    <div class="bg-slate-900 border border-slate-800 rounded-3xl max-w-sm w-full p-5 shadow-2xl">
+      <div class="flex justify-between items-center mb-3">
+        <h3 class="text-base font-bold text-white">选择查看月份</h3>
+        <button id="closeMonthPickerBtn" class="text-slate-400 hover:text-white text-xs">关闭</button>
+      </div>
+      <p class="text-xs text-slate-400 mb-4">切换账目所属年份与月份，或一键回到当前月</p>
+
+      <div class="grid grid-cols-2 gap-3 mb-4">
+        <div>
+          <label class="text-[11px] text-slate-400 block mb-1">年份</label>
+          <select id="modalYearSelect" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white outline-none focus:border-emerald-500">
+            <!-- 2024 to 2028 -->
+          </select>
+        </div>
+        <div>
+          <label class="text-[11px] text-slate-400 block mb-1">月份</label>
+          <select id="modalMonthSelect" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white outline-none focus:border-emerald-500">
+            <!-- 1 to 12 -->
+          </select>
+        </div>
+      </div>
+
+      <div class="space-y-2">
+        <button id="confirmMonthPickerBtn" class="w-full py-2.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold rounded-xl text-xs transition">
+          跳转至选定月份
+        </button>
+        <button id="jumpToCurrentMonthBtn" class="w-full py-2.5 bg-slate-800 hover:bg-slate-700 text-emerald-400 font-semibold rounded-xl text-xs transition">
+          回到今天所在当前月
+        </button>
+        <button id="jumpToAllTimeBtn" class="w-full py-2.5 bg-slate-950 hover:bg-slate-800 text-slate-300 font-semibold rounded-xl text-xs border border-slate-800 transition">
+          查看所有历史全部账目
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- QUICK ADD TRANSACTION MODAL -->
+  <div id="quickAddModal" class="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm hidden flex flex-col justify-end">
+    <div class="bg-slate-900 border-t border-slate-800 rounded-t-3xl max-w-md w-full mx-auto max-h-[92vh] overflow-y-auto no-scrollbar flex flex-col p-4 shadow-2xl">
+      <!-- Modal Header -->
+      <div class="flex items-center justify-between pb-3 border-b border-slate-800">
+        <button id="closeQuickAddBtn" class="text-xs text-slate-400 hover:text-white px-2 py-1">取消</button>
+        <!-- Type Segment Control -->
+        <div class="flex bg-slate-950 p-1 rounded-xl border border-slate-800">
+          <button class="type-pill active px-3 py-1 rounded-lg text-xs font-semibold bg-emerald-500 text-slate-950 transition" data-type="expense">支出</button>
+          <button class="type-pill px-3 py-1 rounded-lg text-xs font-semibold text-slate-400 hover:text-white transition" data-type="income">收入</button>
+          <button class="type-pill px-3 py-1 rounded-lg text-xs font-semibold text-slate-400 hover:text-white transition" data-type="transfer">内部转账</button>
+        </div>
+        <button id="saveQuickAddBtn" class="text-xs font-bold text-emerald-400 hover:text-emerald-300 px-2 py-1">保存</button>
+      </div>
+
+      <!-- Big Amount Input Display (Clickable & Keyboard Friendly) -->
+      <div class="py-3 text-center">
+        <div class="text-xs text-slate-400 mb-1">金额 (RM) · 可点小键盘或直接键盘输入</div>
+        <div class="flex items-center justify-center space-x-1.5 cursor-pointer" id="amountDisplayWrapper">
+          <span class="text-2xl font-bold text-emerald-400">RM</span>
+          <span id="amountDisplay" class="text-4xl font-black text-white font-mono tracking-tight">0.00</span>
+        </div>
+      </div>
+
+      <!-- Quick Merchant Pills (Auto-fill) -->
+      <div id="quickMerchantsRow" class="mb-3">
+        <div class="text-[11px] text-slate-400 mb-1.5 flex justify-between">
+          <span>常用高频快捷带出:</span>
+          <span class="text-[10px] text-emerald-400">点击自动填分类与账户</span>
+        </div>
+        <div class="flex items-center space-x-1.5 overflow-x-auto no-scrollbar pb-1">
+          <button class="quick-merchant-btn px-2.5 py-1 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-xs text-slate-300 border border-slate-700 whitespace-nowrap" data-merchant="Zus Coffee" data-cat="餐饮" data-tag="个人消费">☕ Zus Coffee</button>
+          <button class="quick-merchant-btn px-2.5 py-1 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-xs text-slate-300 border border-slate-700 whitespace-nowrap" data-merchant="Grab" data-cat="交通" data-tag="商务出差">🚗 Grab</button>
+          <button class="quick-merchant-btn px-2.5 py-1 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-xs text-slate-300 border border-slate-700 whitespace-nowrap" data-merchant="Shopee" data-cat="购物" data-tag="日常网购">🛍 Shopee</button>
+          <button class="quick-merchant-btn px-2.5 py-1 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-xs text-slate-300 border border-slate-700 whitespace-nowrap" data-merchant="FamilyMart" data-cat="餐饮" data-tag="日常餐饮">🏪 FamilyMart</button>
+          <button class="quick-merchant-btn px-2.5 py-1 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-xs text-slate-300 border border-slate-700 whitespace-nowrap" data-merchant="Mamak档" data-cat="餐饮" data-tag="日常餐饮">🍛 Mamak档</button>
+        </div>
+      </div>
+
+      <!-- Date Quick Pills -->
+      <div class="flex items-center space-x-2 mb-3">
+        <span class="text-xs text-slate-400">日期:</span>
+        <button class="date-quick-btn active text-xs px-2.5 py-1 rounded-lg bg-emerald-500/20 text-emerald-400 font-medium" data-days="0">今天</button>
+        <button class="date-quick-btn text-xs px-2.5 py-1 rounded-lg bg-slate-800 text-slate-400 font-medium" data-days="1">昨天</button>
+        <button class="date-quick-btn text-xs px-2.5 py-1 rounded-lg bg-slate-800 text-slate-400 font-medium" data-days="2">前天</button>
+        <input type="date" id="customTxDate" class="bg-slate-950 border border-slate-800 text-slate-300 text-xs rounded-lg px-2 py-1 outline-none">
+      </div>
+
+      <!-- Categories Grid (Dynamic based on Expense / Income) -->
+      <div id="categoryPickerContainer" class="mb-3">
+        <div class="text-[11px] text-slate-400 mb-1.5 flex justify-between">
+          <span id="categoryLabel">分类选择:</span>
+          <span class="text-[10px] text-slate-400" id="currentSelectedCatName">已选: 餐饮</span>
+        </div>
+        <div class="grid grid-cols-4 gap-2" id="categoryGrid">
+          <!-- Dynamic Category Buttons -->
+        </div>
+      </div>
+
+      <!-- Account Selectors -->
+      <div class="grid grid-cols-2 gap-2 mb-3">
+        <div>
+          <label class="text-[11px] text-slate-400 block mb-1" id="accountFieldLabel">支付/扣款账户</label>
+          <select id="accountSelect" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-2.5 py-2 text-xs text-white outline-none">
+            <!-- Dynamic accounts -->
+          </select>
+        </div>
+        <div id="toAccountWrapper" class="hidden">
+          <label class="text-[11px] text-slate-400 block mb-1">转入目标账户</label>
+          <select id="toAccountSelect" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-2.5 py-2 text-xs text-white outline-none">
+            <!-- Dynamic accounts -->
+          </select>
+        </div>
+      </div>
+
+      <!-- Collapsible Advanced Details -->
+      <div class="mb-3 border border-slate-800/80 rounded-2xl p-2.5 bg-slate-950/60">
+        <div class="flex items-center justify-between cursor-pointer" id="toggleAdvancedDetails">
+          <span class="text-xs font-semibold text-slate-300">高级明细 (商家、标签、报销)</span>
+          <svg class="w-4 h-4 text-slate-400 transform transition-transform" id="advancedArrow" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+        </div>
+
+        <div id="advancedFields" class="mt-3 space-y-2.5 hidden">
+          <!-- Merchant -->
+          <div>
+            <label class="text-[11px] text-slate-400 block mb-1">商家 / 交易对手</label>
+            <input type="text" id="merchantInput" placeholder="如：Grab, Shopee, Zus Coffee" class="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-white outline-none focus:border-emerald-500">
+          </div>
+
+          <!-- Tags -->
+          <div>
+            <label class="text-[11px] text-slate-400 block mb-1">场景标签</label>
+            <div class="flex flex-wrap gap-1.5" id="tagPills">
+              <button type="button" class="tag-pill text-[11px] px-2.5 py-1 rounded-lg bg-slate-900 border border-slate-800 text-slate-400" data-tag="商务出差">+ 商务出差</button>
+              <button type="button" class="tag-pill text-[11px] px-2.5 py-1 rounded-lg bg-slate-900 border border-slate-800 text-slate-400" data-tag="家庭日常">+ 家庭日常</button>
+              <button type="button" class="tag-pill text-[11px] px-2.5 py-1 rounded-lg bg-slate-900 border border-slate-800 text-slate-400" data-tag="人情礼金">+ 人情礼金</button>
+              <button type="button" class="tag-pill text-[11px] px-2.5 py-1 rounded-lg bg-slate-900 border border-slate-800 text-slate-400" data-tag="个人消费">+ 个人消费</button>
+            </div>
+            <input type="hidden" id="selectedTags" value="">
+          </div>
+
+          <!-- Reimbursable Toggle -->
+          <div class="flex items-center justify-between pt-1">
+            <div>
+              <span class="text-xs font-medium text-slate-300">标记为【待公司报销】</span>
+              <p class="text-[10px] text-slate-400">开启后将从卡扣款，但月度生活预算报表排除此项</p>
+            </div>
+            <label class="relative inline-flex items-center cursor-pointer">
+              <input type="checkbox" id="reimbursableToggle" class="sr-only peer">
+              <div class="w-9 h-5 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-amber-500"></div>
+            </label>
+          </div>
+
+          <!-- Note -->
+          <div>
+            <label class="text-[11px] text-slate-400 block mb-1">备注说明</label>
+            <input type="text" id="noteInput" placeholder="可选备注..." class="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-white outline-none focus:border-emerald-500">
+          </div>
+        </div>
+      </div>
+
+      <!-- Customized Numpad -->
+      <div class="grid grid-cols-4 gap-2 pt-1 border-t border-slate-800/80">
+        <button class="numpad-key h-12 rounded-xl bg-slate-950 hover:bg-slate-800 text-base font-bold text-white border border-slate-800/80" data-val="1">1</button>
+        <button class="numpad-key h-12 rounded-xl bg-slate-950 hover:bg-slate-800 text-base font-bold text-white border border-slate-800/80" data-val="2">2</button>
+        <button class="numpad-key h-12 rounded-xl bg-slate-950 hover:bg-slate-800 text-base font-bold text-white border border-slate-800/80" data-val="3">3</button>
+        <button class="numpad-key h-12 rounded-xl bg-slate-800 text-slate-300 text-sm font-semibold" data-action="backspace">⌫</button>
+
+        <button class="numpad-key h-12 rounded-xl bg-slate-950 hover:bg-slate-800 text-base font-bold text-white border border-slate-800/80" data-val="4">4</button>
+        <button class="numpad-key h-12 rounded-xl bg-slate-950 hover:bg-slate-800 text-base font-bold text-white border border-slate-800/80" data-val="5">5</button>
+        <button class="numpad-key h-12 rounded-xl bg-slate-950 hover:bg-slate-800 text-base font-bold text-white border border-slate-800/80" data-val="6">6</button>
+        <button class="numpad-key h-12 rounded-xl bg-slate-800 text-slate-300 text-base font-semibold" data-val="+">+</button>
+
+        <button class="numpad-key h-12 rounded-xl bg-slate-950 hover:bg-slate-800 text-base font-bold text-white border border-slate-800/80" data-val="7">7</button>
+        <button class="numpad-key h-12 rounded-xl bg-slate-950 hover:bg-slate-800 text-base font-bold text-white border border-slate-800/80" data-val="8">8</button>
+        <button class="numpad-key h-12 rounded-xl bg-slate-950 hover:bg-slate-800 text-base font-bold text-white border border-slate-800/80" data-val="9">9</button>
+        <button class="numpad-key h-12 rounded-xl bg-slate-800 text-slate-300 text-base font-semibold" data-val="-">-</button>
+
+        <button class="numpad-key h-12 rounded-xl bg-slate-950 hover:bg-slate-800 text-base font-bold text-white border border-slate-800/80" data-val=".">.</button>
+        <button class="numpad-key h-12 rounded-xl bg-slate-950 hover:bg-slate-800 text-base font-bold text-white border border-slate-800/80" data-val="0">0</button>
+        <button class="numpad-key h-12 rounded-xl bg-slate-950 hover:bg-slate-800 text-base font-bold text-white border border-slate-800/80" data-action="clear">C</button>
+        <button class="numpad-key h-12 rounded-xl bg-emerald-500 active:scale-95 text-slate-950 text-sm font-bold shadow" data-action="done">完成</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ADD ACCOUNT MODAL -->
+  <div id="addAccountModal" class="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm hidden flex items-center justify-center p-4">
+    <div class="bg-slate-900 border border-slate-800 rounded-3xl max-w-sm w-full p-5 shadow-2xl">
+      <div class="flex justify-between items-center mb-3">
+        <h3 class="text-base font-bold text-white">新增资金账户</h3>
+        <button id="closeAddAccountBtn" class="text-slate-400 hover:text-white text-xs">关闭</button>
+      </div>
+      <p class="text-xs text-slate-400 mb-4">添加新的日常花销卡、储蓄卡或电子钱包</p>
+
+      <div class="space-y-3">
+        <div>
+          <label class="text-[11px] text-slate-400 block mb-1">账户名称</label>
+          <input type="text" id="newAccountName" placeholder="例如: Public Bank 花销卡, GrabPay" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white outline-none focus:border-emerald-500">
+        </div>
+        <div>
+          <label class="text-[11px] text-slate-400 block mb-1">账户类型</label>
+          <select id="newAccountType" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white outline-none">
+            <option value="expense">💳 流动日常花销</option>
+            <option value="savings">🏦 稳健储蓄储备</option>
+          </select>
+        </div>
+        <div>
+          <label class="text-[11px] text-slate-400 block mb-1">初始余额 (RM)</label>
+          <input type="number" step="0.01" id="newAccountBalance" placeholder="0.00" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-emerald-400 font-mono font-bold outline-none focus:border-emerald-500">
+        </div>
+      </div>
+
+      <div class="mt-5 flex space-x-2">
+        <button id="cancelAddAccountBtn" class="flex-1 py-2.5 rounded-xl bg-slate-800 text-xs font-semibold text-slate-300">取消</button>
+        <button id="confirmAddAccountBtn" class="flex-1 py-2.5 rounded-xl bg-emerald-500 text-xs font-bold text-slate-950">确认新增</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ADD TERM DEPOSIT / INVESTMENT MODAL -->
+  <div id="addInvestmentModal" class="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm hidden flex items-center justify-center p-4">
+    <div class="bg-slate-900 border border-slate-800 rounded-3xl max-w-sm w-full p-5 shadow-2xl">
+      <div class="flex justify-between items-center mb-3">
+        <h3 class="text-base font-bold text-white">新增定期存单 / 理财产品</h3>
+        <button id="closeAddInvestmentBtn" class="text-slate-400 hover:text-white text-xs">关闭</button>
+      </div>
+      <p class="text-xs text-slate-400 mb-4">锁定资金并计算固定利息收益</p>
+
+      <div class="space-y-3">
+        <div>
+          <label class="text-[11px] text-slate-400 block mb-1">存单/产品名称</label>
+          <input type="text" id="newInvName" placeholder="例如: CIMB 6个月定期存单" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white outline-none focus:border-emerald-500">
+        </div>
+        <div>
+          <label class="text-[11px] text-slate-400 block mb-1">本金金额 (RM)</label>
+          <input type="number" step="0.01" id="newInvPrincipal" placeholder="例如: 5000.00" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-emerald-400 font-mono font-bold outline-none focus:border-emerald-500">
+        </div>
+        <div class="grid grid-cols-2 gap-2">
+          <div>
+            <label class="text-[11px] text-slate-400 block mb-1">年化利率 (%)</label>
+            <input type="number" step="0.01" id="newInvRate" placeholder="例如: 3.85" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white font-mono outline-none focus:border-emerald-500">
+          </div>
+          <div>
+            <label class="text-[11px] text-slate-400 block mb-1">到期日期</label>
+            <input type="date" id="newInvEndDate" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-2 py-2 text-xs text-white outline-none focus:border-emerald-500">
+          </div>
+        </div>
+        <div>
+          <label class="text-[11px] text-slate-400 block mb-1">资金扣除账户 (本金来源)</label>
+          <select id="newInvAccountSelect" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white outline-none">
+            <!-- Dynamic Accounts -->
+          </select>
+        </div>
+      </div>
+
+      <div class="mt-5 flex space-x-2">
+        <button id="cancelAddInvestmentBtn" class="flex-1 py-2.5 rounded-xl bg-slate-800 text-xs font-semibold text-slate-300">取消</button>
+        <button id="confirmAddInvestmentBtn" class="flex-1 py-2.5 rounded-xl bg-emerald-500 text-xs font-bold text-slate-950">确认锁定存入</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- RECONCILE / BALANCE CALIBRATION MODAL -->
+  <div id="reconcileModal" class="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm hidden flex items-center justify-center p-4">
+    <div class="bg-slate-900 border border-slate-800 rounded-3xl max-w-sm w-full p-5 shadow-2xl">
+      <div class="flex justify-between items-center mb-3">
+        <h3 class="text-base font-bold text-white">一键平账 / 余额校准</h3>
+        <button id="closeReconcileBtn" class="text-slate-400 hover:text-white text-xs">关闭</button>
+      </div>
+      <p class="text-xs text-slate-400 mb-4" id="reconcileAccountDesc">校准账户余额</p>
+
+      <div class="space-y-3">
+        <div>
+          <label class="text-[11px] text-slate-400 block mb-1">当前账本记录余额</label>
+          <div class="text-sm font-mono font-bold text-slate-300 bg-slate-950 p-2.5 rounded-xl border border-slate-800" id="reconcileCurrentDisplay">RM 0.00</div>
+        </div>
+        <div>
+          <label class="text-[11px] text-slate-400 block mb-1">输入银行卡实际真实余额 (RM)</label>
+          <input type="number" step="0.01" id="reconcileActualInput" placeholder="例如: 2450.00" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm text-emerald-400 font-mono font-bold outline-none focus:border-emerald-500">
+        </div>
+        <p class="text-[10px] text-slate-400">系统将自动生成一条差额对账微调流水，抹平差额，让账目完美对齐。</p>
+      </div>
+
+      <div class="mt-5 flex space-x-2">
+        <button id="cancelReconcileBtn" class="flex-1 py-2.5 rounded-xl bg-slate-800 text-xs font-semibold text-slate-300">取消</button>
+        <button id="confirmReconcileBtn" class="flex-1 py-2.5 rounded-xl bg-emerald-500 text-xs font-bold text-slate-950">确认平账</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- TRANSFER MODAL -->
+  <div id="transferModal" class="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm hidden flex items-center justify-center p-4">
+    <div class="bg-slate-900 border border-slate-800 rounded-3xl max-w-sm w-full p-5 shadow-2xl">
+      <div class="flex justify-between items-center mb-3">
+        <h3 class="text-base font-bold text-white">内部资金互转</h3>
+        <button id="closeTransferBtn" class="text-slate-400 hover:text-white text-xs">关闭</button>
+      </div>
+      <p class="text-xs text-slate-400 mb-4">从一张卡转入另一张卡，绝不污染当月收支统计</p>
+
+      <div class="space-y-3">
+        <div>
+          <label class="text-[11px] text-slate-400 block mb-1">转出账户</label>
+          <select id="transferFromSelect" class="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-xs text-white outline-none"></select>
+        </div>
+        <div>
+          <label class="text-[11px] text-slate-400 block mb-1">转入账户</label>
+          <select id="transferToSelect" class="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-xs text-white outline-none"></select>
+        </div>
+        <div>
+          <label class="text-[11px] text-slate-400 block mb-1">转账金额 (RM)</label>
+          <input type="number" step="0.01" id="transferAmountInput" placeholder="0.00" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm text-emerald-400 font-mono font-bold outline-none focus:border-emerald-500">
+        </div>
+      </div>
+
+      <div class="mt-5 flex space-x-2">
+        <button id="cancelTransferModalBtn" class="flex-1 py-2.5 rounded-xl bg-slate-800 text-xs font-semibold text-slate-300">取消</button>
+        <button id="confirmTransferModalBtn" class="flex-1 py-2.5 rounded-xl bg-emerald-500 text-xs font-bold text-slate-950">确认转账</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- DEBT CALIBRATE MODAL -->
+  <div id="debtCalibrateModal" class="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm hidden flex items-center justify-center p-4">
+    <div class="bg-slate-900 border border-slate-800 rounded-3xl max-w-sm w-full p-5 shadow-2xl">
+      <div class="flex justify-between items-center mb-3">
+        <h3 class="text-base font-bold text-white">校准 PTPTN 剩余本金</h3>
+        <button id="closeDebtCalibrateBtn" class="text-slate-400 hover:text-white text-xs">关闭</button>
+      </div>
+      <p class="text-xs text-slate-400 mb-4">按 PTPTN 官网最新对账单数字修正，解决利息或折扣导致的细微偏差</p>
+
+      <div class="space-y-3">
+        <div>
+          <label class="text-[11px] text-slate-400 block mb-1">当前 App 记录待还本金</label>
+          <div class="text-sm font-mono font-bold text-slate-300 bg-slate-950 p-2.5 rounded-xl border border-slate-800" id="currentDebtRemainingDisplay">RM 19,500.00</div>
+        </div>
+        <div>
+          <label class="text-[11px] text-slate-400 block mb-1">官网实际剩余金额 (RM)</label>
+          <input type="number" step="0.01" id="actualDebtRemainingInput" placeholder="例如: 19480.00" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm text-rose-400 font-mono font-bold outline-none focus:border-rose-500">
+        </div>
+      </div>
+
+      <div class="mt-5 flex space-x-2">
+        <button id="cancelDebtCalibrateBtn" class="flex-1 py-2.5 rounded-xl bg-slate-800 text-xs font-semibold text-slate-300">取消</button>
+        <button id="confirmDebtCalibrateBtn" class="flex-1 py-2.5 rounded-xl bg-rose-500 text-xs font-bold text-white">对齐官网本金</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- SETTINGS & BACKUP MODAL -->
+  <div id="settingsModal" class="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm hidden flex items-center justify-center p-4">
+    <div class="bg-slate-900 border border-slate-800 rounded-3xl max-w-sm w-full p-5 shadow-2xl max-h-[85vh] overflow-y-auto no-scrollbar">
+      <div class="flex justify-between items-center mb-4">
+        <h3 class="text-base font-bold text-white">数据备份与设置</h3>
+        <button id="closeSettingsBtn" class="text-slate-400 hover:text-white text-xs">完成</button>
+      </div>
+
+      <div class="space-y-4 text-xs">
+        <!-- Security PIN in-page modification -->
+        <div class="bg-slate-950 p-3.5 rounded-2xl border border-slate-800">
+          <div class="font-bold text-slate-200 mb-1">独立 PIN 码保护</div>
+          <p class="text-slate-400 text-[11px] mb-2.5">当前密码保护已开启，输入新 4 位数字保存：</p>
+          <div class="flex space-x-2">
+            <input type="password" maxlength="4" id="newPinInput" placeholder="新4位PIN" class="w-24 bg-slate-900 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-white outline-none focus:border-emerald-500 font-mono text-center">
+            <button id="saveNewPinBtn" class="px-3 py-1.5 bg-emerald-500 text-slate-950 rounded-xl font-bold">更新 PIN</button>
+          </div>
+        </div>
+
+        <!-- Backup & Export -->
+        <div class="bg-slate-950 p-3.5 rounded-2xl border border-slate-800">
+          <div class="font-bold text-slate-200 mb-1">纯本地数据备份 (防手机丢失)</div>
+          <p class="text-slate-400 text-[11px] mb-3">一键导出 JSON 备份文件，通过 WhatsApp / AirDrop / 云盘跨机恢复。</p>
+          <div class="flex flex-col space-y-2">
+            <button id="exportBackupBtn" class="w-full py-2 bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 rounded-xl font-bold">导出完整数据备份 (.json)</button>
+            <label class="w-full py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl font-semibold text-center cursor-pointer block">
+              从备份文件恢复数据
+              <input type="file" id="importBackupInput" accept=".json" class="hidden">
+            </label>
+            <button id="exportCsvBtn" class="w-full py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl font-semibold">导出 Excel / CSV 明细表</button>
+          </div>
+        </div>
+
+        <!-- Danger Zone -->
+        <div class="bg-slate-950 p-3.5 rounded-2xl border border-slate-800">
+          <div class="font-bold text-rose-400 mb-1">危险操作</div>
+          <p class="text-slate-400 text-[11px] mb-3">重置后将清除当前所有数据并恢复初始示例账目。</p>
+          <button id="resetSampleDataBtn" class="w-full py-2 bg-rose-500/20 text-rose-400 border border-rose-500/30 rounded-xl font-bold">重置为示例账本</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- IN-PAGE TOAST NOTIFICATION -->
+  <div id="toast" class="fixed top-6 left-1/2 -translate-x-1/2 z-50 bg-slate-800/95 border border-slate-700 text-white text-xs px-4 py-2.5 rounded-2xl shadow-2xl pointer-events-none transition-all duration-300 opacity-0 transform -translate-y-2">
+    提示信息
+  </div>
+
+  <!-- SCRIPT LOGIC -->
+  <script>
+    // --- TIMEZONE-SAFE LOCAL DATE UTILITY ---
+    function getLocalDateString(d = new Date()) {
+      const year = d.getFullYear();
+      const month = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    }
+
+    // --- DATA STATE & PERSISTENCE ---
+    const STORAGE_KEY = 'vault_ledger_data_v2';
+    const PIN_KEY = 'vault_ledger_pin_v2';
+
+    // Helper to generate dynamic seed dates relative to NOW
+    function createInitialSeedData() {
+      const now = new Date();
+      const y = now.getFullYear();
+      const m = now.getMonth();
+      const d = now.getDate();
+
+      const dToday = new Date(y, m, d, 8, 30);
+      const dYesterday = new Date(y, m, Math.max(1, d - 1), 14, 20);
+      const d2DaysAgo = new Date(y, m, Math.max(1, d - 2), 20, 10);
+      const dFirstDay = new Date(y, m, 1, 9, 0);
+
+      // Last month 25th for PTPTN
+      const dLastMonth25 = new Date(y, m - 1, 25, 10, 0);
+
+      return {
+        accounts: [
+          { id: 1, name: 'Maybank 花销卡', type: 'expense', balance: 1450.50 },
+          { id: 2, name: "Touch 'n Go eWallet", type: 'expense', balance: 220.00 },
+          { id: 3, name: 'CIMB 储蓄储备卡', type: 'savings', balance: 18500.00 }
+        ],
+        investments: [
+          { id: 1, name: 'Maybank 12个月定期存单', principal: 10000.00, rate: 3.65, endDate: `${y + 1}-06-30` }
+        ],
+        debt: {
+          id: 1,
+          title: 'PTPTN 助学贷款',
+          totalAmount: 30000.00,
+          remainingAmount: 19500.00,
+          monthlyDue: 150.00,
+          dueDay: 25
+        },
+        transactions: [
+          { id: 1, type: 'expense', amount: 14.50, accountId: 1, category: '餐饮', merchant: 'Zus Coffee', tags: '个人消费', isReimbursable: false, reimbursementStatus: 'none', note: '拿铁咖啡', date: dToday.toISOString() },
+          { id: 2, type: 'expense', amount: 26.00, accountId: 2, category: '交通', merchant: 'Grab', tags: '商务出差', isReimbursable: true, reimbursementStatus: 'pending', note: '去客户公司开会', date: dYesterday.toISOString() },
+          { id: 3, type: 'expense', amount: 88.00, accountId: 1, category: '购物', merchant: 'Shopee', tags: '日常网购', isReimbursable: false, reimbursementStatus: 'none', note: '日用品补充', date: d2DaysAgo.toISOString() },
+          { id: 4, type: 'income', amount: 4800.00, accountId: 1, category: '工资薪酬', merchant: '公司发薪', tags: '工资', isReimbursable: false, reimbursementStatus: 'none', note: '本月工资入账', date: dFirstDay.toISOString() },
+          { id: 5, type: 'expense', amount: 150.00, accountId: 1, category: '贷款还款', merchant: 'PTPTN', tags: '助学贷款', isReimbursable: false, reimbursementStatus: 'none', note: '上月固定本息还款', date: dLastMonth25.toISOString() }
+        ]
+      };
+    }
+
+    let state = loadState();
+    // Start strictly on USER'S CURRENT MONTH
+    let currentSelectedDate = new Date();
+    let isAllTimeMode = false;
+    let activeFilter = 'all';
+
+    function loadState() {
+      try {
+        const stored = localStorage.getItem(STORAGE_KEY);
+        if (stored) return JSON.parse(stored);
+      } catch (e) {
+        console.warn('LocalStorage error:', e);
+      }
+      return createInitialSeedData();
+    }
+
+    function saveState() {
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      } catch (e) {
+        console.warn('LocalStorage save error:', e);
+      }
+      renderAll();
+    }
+
+    // Toast Utility
+    function showToast(msg) {
+      const toast = document.getElementById('toast');
+      toast.textContent = msg;
+      toast.classList.remove('opacity-0', '-translate-y-2');
+      setTimeout(() => {
+        toast.classList.add('opacity-0', '-translate-y-2');
+      }, 2400);
+    }
+
+    // Format Currency RM
+    function formatRM(amount) {
+      const num = Number(amount) || 0;
+      return 'RM ' + num.toLocaleString('en-MY', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
+    // --- PIN LOCK SYSTEM ---
+    let userPin = '1234';
+    try {
+      const savedPin = localStorage.getItem(PIN_KEY);
+      if (savedPin) userPin = savedPin;
+    } catch(e) {}
+
+    let currentPinInput = '';
+
+    function updatePinDots() {
+      const dots = document.querySelectorAll('#pinDots div');
+      dots.forEach((dot, index) => {
+        if (index < currentPinInput.length) {
+          dot.className = 'w-4 h-4 rounded-full bg-emerald-400 border-2 border-emerald-400 transition-all duration-200 shadow-sm shadow-emerald-400/50';
+        } else {
+          dot.className = 'w-4 h-4 rounded-full border-2 border-slate-700 transition-all duration-200';
+        }
+      });
+    }
+
+    function handlePinKey(num) {
+      if (currentPinInput.length < 4) {
+        currentPinInput += num;
+        updatePinDots();
+        if (currentPinInput.length === 4) {
+          setTimeout(() => {
+            if (currentPinInput === userPin) {
+              document.getElementById('pinLockModal').classList.add('opacity-0', 'pointer-events-none');
+              currentPinInput = '';
+              updatePinDots();
+              document.getElementById('pinError').textContent = '';
+            } else {
+              document.getElementById('pinError').textContent = 'PIN 码错误，请重新输入';
+              currentPinInput = '';
+              updatePinDots();
+            }
+          }, 150);
+        }
+      }
+    }
+
+    document.querySelectorAll('.pin-key[data-num]').forEach(btn => {
+      btn.addEventListener('click', () => handlePinKey(btn.dataset.num));
+    });
+
+    document.getElementById('pinBackspace').addEventListener('click', () => {
+      currentPinInput = currentPinInput.slice(0, -1);
+      updatePinDots();
+      document.getElementById('pinError').textContent = '';
+    });
+
+    document.getElementById('pinQuickFill').addEventListener('click', () => {
+      currentPinInput = userPin;
+      updatePinDots();
+      setTimeout(() => {
+        document.getElementById('pinLockModal').classList.add('opacity-0', 'pointer-events-none');
+        currentPinInput = '';
+        updatePinDots();
+      }, 100);
+    });
+
+    document.getElementById('lockAppBtn').addEventListener('click', () => {
+      document.getElementById('pinLockModal').classList.remove('opacity-0', 'pointer-events-none');
+      currentPinInput = '';
+      updatePinDots();
+    });
+
+    document.getElementById('pinResetBtn').addEventListener('click', () => {
+      userPin = '1234';
+      try { localStorage.setItem(PIN_KEY, '1234'); } catch(e){}
+      showToast('PIN 码已重置为默认: 1234');
+    });
+
+    // --- TAB SWITCHING ---
+    document.querySelectorAll('.nav-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.nav-btn').forEach(b => {
+          b.classList.remove('active', 'text-emerald-400');
+          b.classList.add('text-slate-400');
+        });
+        btn.classList.add('active', 'text-emerald-400');
+        btn.classList.remove('text-slate-400');
+
+        const targetViewId = btn.dataset.view;
+        document.querySelectorAll('.app-view').forEach(view => {
+          view.classList.add('hidden');
+        });
+        document.getElementById(targetViewId).classList.remove('hidden');
+
+        if (targetViewId === 'viewAnalytics') {
+          setTimeout(renderCharts, 100);
+        }
+      });
+    });
+
+    // --- MONTH CHANGER & PICKER MODAL ---
+    function updateMonthDisplay() {
+      if (isAllTimeMode) {
+        document.getElementById('currentMonthLabel').textContent = '全部历史明细';
+        document.getElementById('monthSubLabel').textContent = `共 ${state.transactions.length} 笔所有记录`;
+        document.getElementById('analyticsMonthLabel').textContent = '全部历史消费全景';
+      } else {
+        const year = currentSelectedDate.getFullYear();
+        const month = currentSelectedDate.getMonth() + 1;
+        document.getElementById('currentMonthLabel').textContent = `${year}年 ${month}月`;
+        document.getElementById('monthSubLabel').textContent = '点击切换月份或查看全部';
+        document.getElementById('analyticsMonthLabel').textContent = `${year}年 ${month}月消费全景`;
+      }
+      renderLedger();
+      renderCharts();
+    }
+
+    document.getElementById('prevMonthBtn').addEventListener('click', () => {
+      isAllTimeMode = false;
+      currentSelectedDate.setMonth(currentSelectedDate.getMonth() - 1);
+      updateMonthDisplay();
+    });
+
+    document.getElementById('nextMonthBtn').addEventListener('click', () => {
+      isAllTimeMode = false;
+      currentSelectedDate.setMonth(currentSelectedDate.getMonth() + 1);
+      updateMonthDisplay();
+    });
+
+    // Open Month Picker Modal
+    const monthPickerModal = document.getElementById('monthPickerModal');
+    document.getElementById('monthPickerTrigger').addEventListener('click', () => {
+      populateMonthPickerOptions();
+      monthPickerModal.classList.remove('hidden');
+    });
+
+    document.getElementById('closeMonthPickerBtn').addEventListener('click', () => {
+      monthPickerModal.classList.add('hidden');
+    });
+
+    function populateMonthPickerOptions() {
+      const yearSelect = document.getElementById('modalYearSelect');
+      const monthSelect = document.getElementById('modalMonthSelect');
+      const curY = currentSelectedDate.getFullYear();
+      const curM = currentSelectedDate.getMonth() + 1;
+
+      // Populate Years around current
+      let yHtml = '';
+      for (let y = curY - 2; y <= curY + 2; y++) {
+        yHtml += `<option value="${y}" ${y === curY ? 'selected' : ''}>${y} 年</option>`;
+      }
+      yearSelect.innerHTML = yHtml;
+
+      let mHtml = '';
+      for (let m = 1; m <= 12; m++) {
+        mHtml += `<option value="${m}" ${m === curM ? 'selected' : ''}>${m} 月</option>`;
+      }
+      monthSelect.innerHTML = mHtml;
+    }
+
+    document.getElementById('confirmMonthPickerBtn').addEventListener('click', () => {
+      const y = parseInt(document.getElementById('modalYearSelect').value);
+      const m = parseInt(document.getElementById('modalMonthSelect').value) - 1;
+      isAllTimeMode = false;
+      currentSelectedDate = new Date(y, m, 1);
+      monthPickerModal.classList.add('hidden');
+      updateMonthDisplay();
+      showToast(`已切换至: ${y}年 ${m+1}月`);
+    });
+
+    document.getElementById('jumpToCurrentMonthBtn').addEventListener('click', () => {
+      isAllTimeMode = false;
+      currentSelectedDate = new Date();
+      monthPickerModal.classList.add('hidden');
+      updateMonthDisplay();
+      showToast('已回到当前月');
+    });
+
+    document.getElementById('jumpToAllTimeBtn').addEventListener('click', () => {
+      isAllTimeMode = true;
+      monthPickerModal.classList.add('hidden');
+      updateMonthDisplay();
+      showToast('正在展示全部历史明细');
+    });
+
+    // --- RENDER LEDGER & TRANSACTIONS ---
+    function renderLedger() {
+      const year = currentSelectedDate.getFullYear();
+      const month = currentSelectedDate.getMonth();
+
+      // Filter by Month or All Time
+      let displayedTxs = state.transactions;
+      if (!isAllTimeMode) {
+        displayedTxs = state.transactions.filter(t => {
+          const d = new Date(t.date);
+          return d.getFullYear() === year && d.getMonth() === month;
+        });
+      }
+
+      // Filter by Type Pill
+      let filteredTxs = displayedTxs;
+      if (activeFilter === 'expense') filteredTxs = displayedTxs.filter(t => t.type === 'expense');
+      else if (activeFilter === 'income') filteredTxs = displayedTxs.filter(t => t.type === 'income');
+      else if (activeFilter === 'reimbursable') filteredTxs = displayedTxs.filter(t => t.isReimbursable);
+
+      // Calculate Monthly KPIs
+      let totalIncome = 0;
+      let totalExpense = 0;
+      let pendingReimburse = 0;
+
+      displayedTxs.forEach(t => {
+        if (t.type === 'income') {
+          totalIncome += t.amount;
+        } else if (t.type === 'expense') {
+          if (!t.isReimbursable || t.reimbursementStatus === 'settled') {
+            totalExpense += t.amount;
+          }
+        }
+        if (t.isReimbursable && t.reimbursementStatus === 'pending') {
+          pendingReimburse += t.amount;
+        }
+      });
+
+      document.getElementById('kpiIncome').textContent = formatRM(totalIncome);
+      document.getElementById('kpiExpense').textContent = formatRM(totalExpense);
+      const balance = totalIncome - totalExpense;
+      const balanceEl = document.getElementById('kpiBalance');
+      balanceEl.textContent = formatRM(balance);
+      balanceEl.className = balance >= 0 ? 'text-sm font-extrabold text-slate-100 mt-1 truncate' : 'text-sm font-extrabold text-rose-400 mt-1 truncate';
+
+      // Pending Reimburse Banner
+      const banner = document.getElementById('reimburseBanner');
+      if (pendingReimburse > 0) {
+        banner.classList.remove('hidden');
+        document.getElementById('reimburseAmount').textContent = formatRM(pendingReimburse);
+      } else {
+        banner.classList.add('hidden');
+      }
+
+      // Render Transaction List (Sorted Descending)
+      const listContainer = document.getElementById('transactionList');
+      listContainer.innerHTML = '';
+
+      if (filteredTxs.length === 0) {
+        const otherMonthsCount = state.transactions.length;
+        listContainer.innerHTML = `
+          <div class="text-center py-12 text-slate-500">
+            <svg class="w-12 h-12 mx-auto mb-2 opacity-40" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+            <p class="text-xs text-slate-300 font-medium">当前月份暂无明细</p>
+            ${otherMonthsCount > 0 ? `<p class="text-[11px] text-slate-500 mt-1">其他月份共有 ${otherMonthsCount} 笔记录</p><button class="mt-2 text-xs text-emerald-400 hover:underline" onclick="document.getElementById('jumpToAllTimeBtn').click()">点击查看全部历史</button>` : ''}
+            <div class="mt-4">
+              <button class="text-xs text-slate-950 font-bold bg-emerald-500 hover:bg-emerald-400 px-4 py-2 rounded-xl shadow" onclick="document.getElementById('openQuickAddBtn').click()">立即记一笔</button>
+            </div>
+          </div>
+        `;
+        return;
+      }
+
+      // Sort descending by date
+      filteredTxs.sort((a, b) => new Date(b.date) - new Date(a.date));
+
+      filteredTxs.forEach((item, index) => {
+        const d = new Date(item.date);
+        const dateStr = `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日`;
+        const timeStr = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+        const acc = state.accounts.find(a => a.id === item.accountId) || { name: '未知账户' };
+
+        let amountColor = 'text-rose-400';
+        let amountPrefix = '- ';
+        if (item.type === 'income') {
+          amountColor = 'text-emerald-400';
+          amountPrefix = '+ ';
+        } else if (item.type === 'transfer') {
+          amountColor = 'text-indigo-400';
+          amountPrefix = '⇄ ';
+        }
+
+        const isNewlyAdded = item._isJustAdded;
+
+        const card = document.createElement('div');
+        card.className = `bg-slate-900 border border-slate-800/80 rounded-2xl p-3 flex items-center justify-between hover:border-slate-700 transition shadow-sm ${isNewlyAdded ? 'new-tx-highlight' : ''}`;
+        card.innerHTML = `
+          <div class="flex items-center space-x-3">
+            <div class="w-10 h-10 rounded-2xl ${item.type === 'income' ? 'bg-emerald-500/10 text-emerald-400' : (item.type === 'transfer' ? 'bg-indigo-500/10 text-indigo-400' : 'bg-slate-800 text-slate-200')} flex items-center justify-center text-lg shadow-inner">
+              ${getCategoryIcon(item.category)}
+            </div>
+            <div>
+              <div class="flex items-center space-x-2">
+                <span class="text-xs font-bold text-white">${item.merchant || item.category}</span>
+                ${item.merchant ? `<span class="text-[10px] px-1.5 py-0.2 rounded bg-slate-800 text-slate-400">${item.category}</span>` : ''}
+                ${item.isReimbursable ? `<span class="text-[10px] px-1.5 py-0.5 rounded font-semibold ${item.reimbursementStatus === 'settled' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-amber-500/20 text-amber-400'}">${item.reimbursementStatus === 'settled' ? '已报销' : '待报销'}</span>` : ''}
+              </div>
+              <div class="flex items-center space-x-2 text-[11px] text-slate-400 mt-1">
+                <span>${dateStr}</span>
+                <span>·</span>
+                <span>${acc.name}</span>
+                ${item.tags ? `<span>·</span><span class="text-slate-400">#${item.tags}</span>` : ''}
+              </div>
+            </div>
+          </div>
+          <div class="text-right">
+            <div class="text-sm font-bold font-mono ${amountColor}">
+              ${amountPrefix}${formatRM(item.amount)}
+            </div>
+            <div class="flex items-center justify-end space-x-2 mt-0.5">
+              ${item.type === 'expense' ? `<button class="refund-tx-btn text-[10px] text-slate-400 hover:text-emerald-400" data-id="${item.id}">退款冲账</button>` : ''}
+              <button class="delete-tx-btn text-[10px] text-slate-400 hover:text-rose-400" data-id="${item.id}">删除</button>
+            </div>
+          </div>
+        `;
+
+        card.querySelector('.delete-tx-btn').addEventListener('click', (e) => {
+          e.stopPropagation();
+          deleteTransaction(item.id);
+        });
+
+        const refundBtn = card.querySelector('.refund-tx-btn');
+        if (refundBtn) {
+          refundBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            refundTransaction(item.id);
+          });
+        }
+
+        listContainer.appendChild(card);
+      });
+    }
+
+    function getCategoryIcon(cat) {
+      const map = {
+        '餐饮': '🍜', '交通': '🚗', '购物': '🛍', '居住水电': '🏠',
+        '娱乐休闲': '🎮', '人情礼金': '🧧', '医疗保健': '💊', '其他支出': '📦',
+        '工资薪酬': '💰', '兼职奖金': '💼', '投资收益': '📈', '其他收入': '💵',
+        '内部转账': '⇄', '平账校准': '⚖️', '贷款还款': '🎓'
+      };
+      return map[cat] || '📄';
+    }
+
+    function deleteTransaction(id) {
+      const idx = state.transactions.findIndex(t => t.id === id);
+      if (idx !== -1) {
+        const item = state.transactions[idx];
+        const acc = state.accounts.find(a => a.id === item.accountId);
+        if (acc) {
+          if (item.type === 'expense') acc.balance += item.amount;
+          else if (item.type === 'income') acc.balance -= item.amount;
+        }
+        state.transactions.splice(idx, 1);
+        saveState();
+        showToast('已删除记录');
+      }
+    }
+
+    function refundTransaction(id) {
+      const item = state.transactions.find(t => t.id === id);
+      if (!item) return;
+      const acc = state.accounts.find(a => a.id === item.accountId);
+      if (acc) {
+        acc.balance += item.amount;
+        state.transactions.push({
+          id: Date.now(),
+          type: 'income',
+          amount: item.amount,
+          accountId: acc.id,
+          category: '其他收入',
+          merchant: `${item.merchant || item.category} (退款冲账)`,
+          tags: '退款',
+          isReimbursable: false,
+          reimbursementStatus: 'none',
+          note: `冲减原单 ${formatRM(item.amount)}`,
+          date: new Date().toISOString()
+        });
+        saveState();
+        showToast(`已成功冲账退款 ${formatRM(item.amount)}`);
+      }
+    }
+
+    // Filter pills event
+    document.querySelectorAll('.filter-pill').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.filter-pill').forEach(b => {
+          b.className = 'filter-pill px-3 py-1.5 rounded-xl text-xs font-medium bg-slate-900 text-slate-300 hover:bg-slate-800 transition';
+        });
+        btn.className = 'filter-pill active px-3 py-1.5 rounded-xl text-xs font-medium bg-emerald-500 text-slate-950 transition';
+        activeFilter = btn.dataset.filter;
+        if (activeFilter === 'all_time') {
+          isAllTimeMode = true;
+        } else {
+          isAllTimeMode = false;
+        }
+        updateMonthDisplay();
+      });
+    });
+
+    // --- RENDER ACCOUNTS ---
+    function renderAccounts() {
+      let totalLiquid = 0;
+      let expenseSub = 0;
+      let savingsSub = 0;
+
+      const expenseList = document.getElementById('expenseAccountsList');
+      const savingsList = document.getElementById('savingsAccountsList');
+      expenseList.innerHTML = '';
+      savingsList.innerHTML = '';
+
+      state.accounts.forEach(acc => {
+        totalLiquid += acc.balance;
+        const card = document.createElement('div');
+        card.className = 'bg-slate-900 border border-slate-800 rounded-2xl p-3.5 flex items-center justify-between shadow-sm';
+        card.innerHTML = `
+          <div>
+            <div class="text-xs font-bold text-white flex items-center space-x-1.5">
+              <span>${acc.name}</span>
+            </div>
+            <div class="text-[11px] text-slate-400 mt-0.5 font-mono">余额: ${formatRM(acc.balance)}</div>
+          </div>
+          <button class="reconcile-open-btn text-xs font-semibold px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-emerald-400 border border-slate-700 transition" data-id="${acc.id}">
+            一键平账
+          </button>
+        `;
+
+        card.querySelector('.reconcile-open-btn').addEventListener('click', () => {
+          openReconcileModal(acc.id);
+        });
+
+        if (acc.type === 'expense') {
+          expenseSub += acc.balance;
+          expenseList.appendChild(card);
+        } else {
+          savingsSub += acc.balance;
+          savingsList.appendChild(card);
+        }
+      });
+
+      document.getElementById('netAssetAmount').textContent = formatRM(totalLiquid);
+      document.getElementById('expenseAccountsSubtotal').textContent = formatRM(expenseSub);
+      document.getElementById('savingsAccountsSubtotal').textContent = formatRM(savingsSub);
+
+      // Investments
+      const investList = document.getElementById('investmentsList');
+      investList.innerHTML = '';
+      if (state.investments.length === 0) {
+        investList.innerHTML = '<div class="text-xs text-slate-500 py-3 text-center">暂无定期存单，可点击上方“+ 新增定存”添加</div>';
+      } else {
+        state.investments.forEach((inv, index) => {
+          const icard = document.createElement('div');
+          icard.className = 'bg-slate-900 border border-slate-800 rounded-2xl p-3.5 flex items-center justify-between shadow-sm';
+          icard.innerHTML = `
+            <div>
+              <div class="text-xs font-bold text-white">${inv.name}</div>
+              <div class="text-[11px] text-slate-400 mt-0.5">年化利率: <span class="text-emerald-400 font-bold">${inv.rate}%</span> · 到期日: ${inv.endDate}</div>
+            </div>
+            <div class="text-right">
+              <span class="text-xs font-bold text-slate-200 font-mono">${formatRM(inv.principal)}</span>
+              <div class="text-[10px] text-emerald-400 font-semibold">持有中</div>
+            </div>
+          `;
+          investList.appendChild(icard);
+        });
+      }
+
+      updateAccountDropdowns();
+    }
+
+    function updateAccountDropdowns() {
+      const accSelect = document.getElementById('accountSelect');
+      const toAccSelect = document.getElementById('toAccountSelect');
+      const fromTransfer = document.getElementById('transferFromSelect');
+      const toTransfer = document.getElementById('transferToSelect');
+      const invAccSelect = document.getElementById('newInvAccountSelect');
+
+      let optionsHtml = '';
+      state.accounts.forEach(a => {
+        optionsHtml += `<option value="${a.id}">${a.name} (${formatRM(a.balance)})</option>`;
+      });
+
+      accSelect.innerHTML = optionsHtml;
+      toAccSelect.innerHTML = optionsHtml;
+      fromTransfer.innerHTML = optionsHtml;
+      toTransfer.innerHTML = optionsHtml;
+      if (invAccSelect) invAccSelect.innerHTML = optionsHtml;
+    }
+
+    // --- ADD NEW ACCOUNT MODAL ---
+    const addAccountModal = document.getElementById('addAccountModal');
+    document.getElementById('addNewAccountBtn').addEventListener('click', () => {
+      document.getElementById('newAccountName').value = '';
+      document.getElementById('newAccountBalance').value = '';
+      addAccountModal.classList.remove('hidden');
+    });
+
+    document.getElementById('closeAddAccountBtn').addEventListener('click', () => {
+      addAccountModal.classList.add('hidden');
+    });
+    document.getElementById('cancelAddAccountBtn').addEventListener('click', () => {
+      addAccountModal.classList.add('hidden');
+    });
+
+    document.getElementById('confirmAddAccountBtn').addEventListener('click', () => {
+      const name = document.getElementById('newAccountName').value.trim();
+      const type = document.getElementById('newAccountType').value;
+      const bal = parseFloat(document.getElementById('newAccountBalance').value) || 0;
+
+      if (!name) {
+        showToast('请输入账户名称');
+        return;
+      }
+
+      state.accounts.push({
+        id: Date.now(),
+        name: name,
+        type: type,
+        balance: bal
+      });
+
+      saveState();
+      addAccountModal.classList.add('hidden');
+      showToast(`已成功新增账户: ${name}`);
+    });
+
+    // --- ADD NEW TERM DEPOSIT MODAL ---
+    const addInvestmentModal = document.getElementById('addInvestmentModal');
+    document.getElementById('addInvestmentBtn').addEventListener('click', () => {
+      document.getElementById('newInvName').value = '';
+      document.getElementById('newInvPrincipal').value = '';
+      document.getElementById('newInvRate').value = '';
+      const futureDate = new Date();
+      futureDate.setFullYear(futureDate.getFullYear() + 1);
+      document.getElementById('newInvEndDate').value = getLocalDateString(futureDate);
+      addInvestmentModal.classList.remove('hidden');
+    });
+
+    document.getElementById('closeAddInvestmentBtn').addEventListener('click', () => {
+      addInvestmentModal.classList.add('hidden');
+    });
+    document.getElementById('cancelAddInvestmentBtn').addEventListener('click', () => {
+      addInvestmentModal.classList.add('hidden');
+    });
+
+    document.getElementById('confirmAddInvestmentBtn').addEventListener('click', () => {
+      const name = document.getElementById('newInvName').value.trim();
+      const principal = parseFloat(document.getElementById('newInvPrincipal').value);
+      const rate = parseFloat(document.getElementById('newInvRate').value);
+      const endDate = document.getElementById('newInvEndDate').value;
+      const fromAccId = parseInt(document.getElementById('newInvAccountSelect').value);
+
+      if (!name) {
+        showToast('请输入定存产品名称');
+        return;
+      }
+      if (isNaN(principal) || principal <= 0) {
+        showToast('请输入有效的本金金额');
+        return;
+      }
+      if (isNaN(rate) || rate <= 0) {
+        showToast('请输入有效年化利率');
+        return;
+      }
+
+      const fromAcc = state.accounts.find(a => a.id === fromAccId);
+      if (fromAcc) {
+        fromAcc.balance -= principal;
+      }
+
+      state.investments.push({
+        id: Date.now(),
+        name: name,
+        principal: principal,
+        rate: rate,
+        endDate: endDate
+      });
+
+      state.transactions.push({
+        id: Date.now(),
+        type: 'transfer',
+        amount: principal,
+        accountId: fromAccId,
+        category: '投资理财',
+        merchant: `${name} (锁定定存)`,
+        tags: '定存理财',
+        isReimbursable: false,
+        reimbursementStatus: 'none',
+        note: `从 ${fromAcc ? fromAcc.name : ''} 转入定存锁定`,
+        date: new Date().toISOString()
+      });
+
+      saveState();
+      addInvestmentModal.classList.add('hidden');
+      showToast(`已成功创建存单: ${name}`);
+    });
+
+    // --- RECONCILE MODAL ---
+    let targetReconcileAccountId = null;
+    function openReconcileModal(accId) {
+      targetReconcileAccountId = accId;
+      const acc = state.accounts.find(a => a.id === accId);
+      if (!acc) return;
+      document.getElementById('reconcileAccountDesc').textContent = `正在校准：${acc.name}`;
+      document.getElementById('reconcileCurrentDisplay').textContent = formatRM(acc.balance);
+      document.getElementById('reconcileActualInput').value = '';
+      document.getElementById('reconcileModal').classList.remove('hidden');
+    }
+
+    document.getElementById('closeReconcileBtn').addEventListener('click', () => {
+      document.getElementById('reconcileModal').classList.add('hidden');
+    });
+    document.getElementById('cancelReconcileBtn').addEventListener('click', () => {
+      document.getElementById('reconcileModal').classList.add('hidden');
+    });
+
+    document.getElementById('confirmReconcileBtn').addEventListener('click', () => {
+      const val = parseFloat(document.getElementById('reconcileActualInput').value);
+      if (isNaN(val)) {
+        showToast('请输入有效的数字金额');
+        return;
+      }
+      const acc = state.accounts.find(a => a.id === targetReconcileAccountId);
+      if (acc) {
+        const diff = val - acc.balance;
+        if (Math.abs(diff) > 0.001) {
+          acc.balance = val;
+          state.transactions.push({
+            id: Date.now(),
+            type: diff > 0 ? 'income' : 'expense',
+            amount: Math.abs(diff),
+            accountId: acc.id,
+            category: '平账校准',
+            merchant: '系统对账',
+            tags: '对齐',
+            isReimbursable: false,
+            reimbursementStatus: 'none',
+            note: '一键平账校准',
+            date: new Date().toISOString()
+          });
+          saveState();
+          showToast(`已平账：${acc.name} 余额更新为 ${formatRM(val)}`);
+        }
+      }
+      document.getElementById('reconcileModal').classList.add('hidden');
+    });
+
+    // --- TRANSFER MODAL ---
+    document.getElementById('quickTransferBtn').addEventListener('click', () => {
+      document.getElementById('transferModal').classList.remove('hidden');
+    });
+    document.getElementById('closeTransferBtn').addEventListener('click', () => {
+      document.getElementById('transferModal').classList.add('hidden');
+    });
+    document.getElementById('cancelTransferModalBtn').addEventListener('click', () => {
+      document.getElementById('transferModal').classList.add('hidden');
+    });
+
+    document.getElementById('confirmTransferModalBtn').addEventListener('click', () => {
+      const fromId = parseInt(document.getElementById('transferFromSelect').value);
+      const toId = parseInt(document.getElementById('transferToSelect').value);
+      const amount = parseFloat(document.getElementById('transferAmountInput').value);
+
+      if (fromId === toId) {
+        showToast('转出与转入不能是同一账户');
+        return;
+      }
+      if (isNaN(amount) || amount <= 0) {
+        showToast('请输入有效转账金额');
+        return;
+      }
+
+      const fromAcc = state.accounts.find(a => a.id === fromId);
+      const toAcc = state.accounts.find(a => a.id === toId);
+
+      if (fromAcc && toAcc) {
+        fromAcc.balance -= amount;
+        toAcc.balance += amount;
+        state.transactions.push({
+          id: Date.now(),
+          type: 'transfer',
+          amount: amount,
+          accountId: fromId,
+          toAccountId: toId,
+          category: '内部转账',
+          merchant: `${fromAcc.name} ➔ ${toAcc.name}`,
+          tags: '互转',
+          isReimbursable: false,
+          reimbursementStatus: 'none',
+          note: '账户互转',
+          date: new Date().toISOString()
+        });
+        saveState();
+        showToast(`成功互转 ${formatRM(amount)}`);
+        document.getElementById('transferModal').classList.add('hidden');
+      }
+    });
+
+    // --- PTPTN DEBT SECTION ---
+    function renderDebt() {
+      const d = state.debt;
+      const paid = d.totalAmount - d.remainingAmount;
+      const pct = ((paid / d.totalAmount) * 100).toFixed(1);
+
+      document.getElementById('ptptnTotal').textContent = formatRM(d.totalAmount);
+      document.getElementById('ptptnRemaining').textContent = formatRM(d.remainingAmount);
+      document.getElementById('ptptnPercent').textContent = `${pct}%`;
+      document.getElementById('ptptnProgressBar').style.width = `${Math.min(100, Math.max(0, pct))}%`;
+      document.getElementById('ptptnMonthlyAmount').textContent = formatRM(d.monthlyDue);
+
+      const today = new Date();
+      const currentDay = today.getDate();
+      let diffDays = d.dueDay - currentDay;
+      if (diffDays < 0) diffDays += 30;
+      document.getElementById('ptptnDueReminder').textContent = `每月 ${d.dueDay} 日 · 还有 ${diffDays} 天`;
+
+      // Render Debt History Logs
+      const debtTxs = state.transactions.filter(t => t.category === '贷款还款' || t.merchant === 'PTPTN');
+      const listEl = document.getElementById('debtHistoryList');
+      listEl.innerHTML = '';
+
+      if (debtTxs.length === 0) {
+        listEl.innerHTML = '<div class="text-xs text-slate-500 py-3 text-center">暂无近期还款记录</div>';
+      } else {
+        debtTxs.forEach(t => {
+          const dt = new Date(t.date);
+          const item = document.createElement('div');
+          item.className = 'bg-slate-900 border border-slate-800 rounded-xl p-3 flex justify-between items-center text-xs';
+          item.innerHTML = `
+            <div>
+              <div class="font-bold text-white">${t.merchant} 还款</div>
+              <div class="text-[10px] text-slate-400">${dt.getFullYear()}-${dt.getMonth()+1}-${dt.getDate()} · ${t.note}</div>
+            </div>
+            <div class="font-bold text-rose-400 font-mono">- ${formatRM(t.amount)}</div>
+          `;
+          listEl.appendChild(item);
+        });
+      }
+    }
+
+    // Quick Pay PTPTN Button
+    document.getElementById('quickPayPtptnBtn').addEventListener('click', () => {
+      const d = state.debt;
+      const expenseAcc = state.accounts.find(a => a.type === 'expense') || state.accounts[0];
+      if (!expenseAcc) {
+        showToast('未找到可扣款花销账户');
+        return;
+      }
+
+      expenseAcc.balance -= d.monthlyDue;
+      d.remainingAmount -= d.monthlyDue;
+      const now = new Date();
+      state.transactions.push({
+        id: Date.now(),
+        type: 'expense',
+        amount: d.monthlyDue,
+        accountId: expenseAcc.id,
+        category: '贷款还款',
+        merchant: 'PTPTN',
+        tags: '贷款还款',
+        isReimbursable: false,
+        reimbursementStatus: 'none',
+        note: `${now.getMonth()+1}月固定本息还款`,
+        date: now.toISOString()
+      });
+
+      // Jump to current month to view
+      currentSelectedDate = new Date();
+      isAllTimeMode = false;
+      saveState();
+      updateMonthDisplay();
+      showToast(`已记录 PTPTN 本月还款 ${formatRM(d.monthlyDue)}`);
+    });
+
+    // Calibrate Debt Modal
+    document.getElementById('calibrateDebtBtn').addEventListener('click', () => {
+      document.getElementById('currentDebtRemainingDisplay').textContent = formatRM(state.debt.remainingAmount);
+      document.getElementById('actualDebtRemainingInput').value = '';
+      document.getElementById('debtCalibrateModal').classList.remove('hidden');
+    });
+    document.getElementById('closeDebtCalibrateBtn').addEventListener('click', () => {
+      document.getElementById('debtCalibrateModal').classList.add('hidden');
+    });
+    document.getElementById('cancelDebtCalibrateBtn').addEventListener('click', () => {
+      document.getElementById('debtCalibrateModal').classList.add('hidden');
+    });
+
+    document.getElementById('confirmDebtCalibrateBtn').addEventListener('click', () => {
+      const val = parseFloat(document.getElementById('actualDebtRemainingInput').value);
+      if (isNaN(val) || val < 0) {
+        showToast('请输入有效的剩余本金数字');
+        return;
+      }
+      state.debt.remainingAmount = val;
+      saveState();
+      showToast(`PTPTN 剩余本金已校准为 ${formatRM(val)}`);
+      document.getElementById('debtCalibrateModal').classList.add('hidden');
+    });
+
+    // --- ANALYTICS & CHARTS (Chart.js) ---
+    let categoryChartInstance = null;
+    let merchantChartInstance = null;
+    let trendChartInstance = null;
+
+    function renderCharts() {
+      const year = currentSelectedDate.getFullYear();
+      const month = currentSelectedDate.getMonth();
+
+      let targetTxs = state.transactions;
+      if (!isAllTimeMode) {
+        targetTxs = state.transactions.filter(t => {
+          const d = new Date(t.date);
+          return d.getFullYear() === year && d.getMonth() === month;
+        });
+      }
+
+      const expenseTxs = targetTxs.filter(t => t.type === 'expense' && (!t.isReimbursable || t.reimbursementStatus === 'settled'));
+
+      // 1. Category Doughnut Chart
+      const catMap = {};
+      expenseTxs.forEach(t => {
+        catMap[t.category] = (catMap[t.category] || 0) + t.amount;
+      });
+
+      const catLabels = Object.keys(catMap);
+      const catData = Object.values(catMap);
+      const catColors = ['#10b981', '#3b82f6', '#f59e0b', '#ec4899', '#8b5cf6', '#06b6d4', '#14b8a6', '#64748b'];
+
+      const ctxCat = document.getElementById('categoryChart').getContext('2d');
+      if (categoryChartInstance) categoryChartInstance.destroy();
+
+      categoryChartInstance = new Chart(ctxCat, {
+        type: 'doughnut',
+        data: {
+          labels: catLabels.length ? catLabels : ['暂无支出'],
+          datasets: [{
+            data: catData.length ? catData : [1],
+            backgroundColor: catLabels.length ? catColors.slice(0, catLabels.length) : ['#334155'],
+            borderWidth: 0,
+            hoverOffset: 4
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: {
+              position: 'right',
+              labels: { color: '#94a3b8', font: { size: 11 } }
+            }
+          },
+          cutout: '70%'
+        }
+      });
+
+      // 2. Merchant Top 5 Horizontal Bar Chart
+      const merchantMap = {};
+      expenseTxs.forEach(t => {
+        if (t.merchant) {
+          merchantMap[t.merchant] = (merchantMap[t.merchant] || 0) + t.amount;
+        }
+      });
+
+      const sortedMerchants = Object.entries(merchantMap).sort((a, b) => b[1] - a[1]).slice(0, 5);
+      const merchLabels = sortedMerchants.map(m => m[0]);
+      const merchData = sortedMerchants.map(m => m[1]);
+
+      const ctxMerch = document.getElementById('merchantChart').getContext('2d');
+      if (merchantChartInstance) merchantChartInstance.destroy();
+
+      merchantChartInstance = new Chart(ctxMerch, {
+        type: 'bar',
+        data: {
+          labels: merchLabels.length ? merchLabels : ['暂无商家数据'],
+          datasets: [{
+            label: '消费金额 (RM)',
+            data: merchData.length ? merchData : [0],
+            backgroundColor: '#10b981',
+            borderRadius: 8
+          }]
+        },
+        options: {
+          indexAxis: 'y',
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: { legend: { display: false } },
+          scales: {
+            x: { ticks: { color: '#64748b', font: { size: 10 } }, grid: { color: '#1e293b' } },
+            y: { ticks: { color: '#cbd5e1', font: { size: 11 } }, grid: { display: false } }
+          }
+        }
+      });
+
+      // 3. Trend & Savings Rate Chart (Last 6 Months)
+      const trendLabels = [];
+      const trendIncome = [];
+      const trendExpense = [];
+      let currentMonthSavingsRate = 0;
+
+      for (let i = 5; i >= 0; i--) {
+        const d = new Date(year, month - i, 1);
+        const y = d.getFullYear();
+        const m = d.getMonth();
+        trendLabels.push(`${m + 1}月`);
+
+        let inc = 0;
+        let exp = 0;
+        state.transactions.forEach(t => {
+          const td = new Date(t.date);
+          if (td.getFullYear() === y && td.getMonth() === m) {
+            if (t.type === 'income') inc += t.amount;
+            else if (t.type === 'expense' && (!t.isReimbursable || t.reimbursementStatus === 'settled')) exp += t.amount;
+          }
+        });
+
+        trendIncome.push(inc);
+        trendExpense.push(exp);
+        if (i === 0 && inc > 0) {
+          currentMonthSavingsRate = (((inc - exp) / inc) * 100).toFixed(1);
+        }
+      }
+
+      document.getElementById('currentSavingsRateBadge').textContent = `当月储蓄率: ${currentMonthSavingsRate}%`;
+
+      const ctxTrend = document.getElementById('trendChart').getContext('2d');
+      if (trendChartInstance) trendChartInstance.destroy();
+
+      trendChartInstance = new Chart(ctxTrend, {
+        type: 'bar',
+        data: {
+          labels: trendLabels,
+          datasets: [
+            { label: '收入', data: trendIncome, backgroundColor: '#10b981', borderRadius: 6 },
+            { label: '支出', data: trendExpense, backgroundColor: '#f43f5e', borderRadius: 6 }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { labels: { color: '#94a3b8', font: { size: 11 } } }
+          },
+          scales: {
+            x: { ticks: { color: '#94a3b8' }, grid: { display: false } },
+            y: { ticks: { color: '#64748b' }, grid: { color: '#1e293b' } }
+          }
+        }
+      });
+
+      renderReimbursementPool();
+    }
+
+    // Analytics Sub-tabs toggle
+    document.getElementById('analyticsChartTabBtn').addEventListener('click', () => {
+      document.getElementById('analyticsChartTabBtn').className = 'px-2.5 py-1 rounded-lg text-xs font-semibold bg-emerald-500 text-slate-950';
+      document.getElementById('analyticsReimburseTabBtn').className = 'px-2.5 py-1 rounded-lg text-xs font-semibold bg-slate-900 text-slate-400';
+      document.getElementById('analyticsChartsSection').classList.remove('hidden');
+      document.getElementById('analyticsReimburseSection').classList.add('hidden');
+    });
+
+    document.getElementById('analyticsReimburseTabBtn').addEventListener('click', () => {
+      document.getElementById('analyticsReimburseTabBtn').className = 'px-2.5 py-1 rounded-lg text-xs font-semibold bg-amber-500 text-slate-950';
+      document.getElementById('analyticsChartTabBtn').className = 'px-2.5 py-1 rounded-lg text-xs font-semibold bg-slate-900 text-slate-400';
+      document.getElementById('analyticsChartsSection').classList.add('hidden');
+      document.getElementById('analyticsReimburseSection').classList.remove('hidden');
+    });
+
+    function renderReimbursementPool() {
+      const pending = state.transactions.filter(t => t.isReimbursable && t.reimbursementStatus === 'pending');
+      const total = pending.reduce((sum, item) => sum + item.amount, 0);
+      document.getElementById('reimbursePoolTotal').textContent = formatRM(total);
+
+      const list = document.getElementById('pendingReimburseList');
+      list.innerHTML = '';
+
+      if (pending.length === 0) {
+        list.innerHTML = '<div class="text-xs text-slate-500 py-6 text-center">暂无待报销款项，账目已清爽核对！</div>';
+        return;
+      }
+
+      pending.forEach(item => {
+        const d = new Date(item.date);
+        const card = document.createElement('div');
+        card.className = 'bg-slate-900 border border-slate-800 rounded-2xl p-3.5 flex items-center justify-between text-xs';
+        card.innerHTML = `
+          <div>
+            <div class="font-bold text-white flex items-center space-x-1.5">
+              <span>${item.merchant || item.category}</span>
+              <span class="text-[10px] bg-amber-500/20 text-amber-400 px-1.5 py-0.5 rounded">待报销</span>
+            </div>
+            <div class="text-[11px] text-slate-400 mt-1">${d.getMonth()+1}月${d.getDate()}日 · ${item.note || '无备注'}</div>
+          </div>
+          <div class="text-right">
+            <div class="font-bold font-mono text-amber-400">${formatRM(item.amount)}</div>
+            <button class="settle-single-btn text-[10px] text-emerald-400 hover:underline mt-1" data-id="${item.id}">核销入账</button>
+          </div>
+        `;
+
+        card.querySelector('.settle-single-btn').addEventListener('click', () => {
+          settleReimbursement(item.id);
+        });
+
+        list.appendChild(card);
+      });
+    }
+
+    function settleReimbursement(id) {
+      const item = state.transactions.find(t => t.id === id);
+      if (item) {
+        item.reimbursementStatus = 'settled';
+        const acc = state.accounts.find(a => a.id === item.accountId);
+        if (acc) acc.balance += item.amount;
+        saveState();
+        showToast(`已核销打款 ${formatRM(item.amount)}，资金已补入卡内`);
+      }
+    }
+
+    document.getElementById('batchSettleReimburseBtn').addEventListener('click', () => {
+      const pending = state.transactions.filter(t => t.isReimbursable && t.reimbursementStatus === 'pending');
+      if (pending.length === 0) {
+        showToast('目前没有待报销的明细');
+        return;
+      }
+      pending.forEach(item => {
+        item.reimbursementStatus = 'settled';
+        const acc = state.accounts.find(a => a.id === item.accountId);
+        if (acc) acc.balance += item.amount;
+      });
+      saveState();
+      showToast('所有待报销款项已一键结清入账！');
+    });
+
+    // --- QUICK ADD TRANSACTION MODAL & CATEGORIES ---
+    const expenseCategories = [
+      { name: '餐饮', icon: '🍜' },
+      { name: '交通', icon: '🚗' },
+      { name: '购物', icon: '🛍' },
+      { name: '居住水电', icon: '🏠' },
+      { name: '娱乐休闲', icon: '🎮' },
+      { name: '人情礼金', icon: '🧧' },
+      { name: '医疗保健', icon: '💊' },
+      { name: '其他支出', icon: '📦' }
+    ];
+
+    const incomeCategories = [
+      { name: '工资薪酬', icon: '💰' },
+      { name: '兼职奖金', icon: '💼' },
+      { name: '投资收益', icon: '📈' },
+      { name: '人情礼金', icon: '🧧' },
+      { name: '其他收入', icon: '💵' }
+    ];
+
+    let currentInputExpression = '0';
+    let currentTxType = 'expense';
+    let currentSelectedCategory = '餐饮';
+
+    const quickAddModal = document.getElementById('quickAddModal');
+    document.getElementById('openQuickAddBtn').addEventListener('click', () => {
+      resetQuickAddForm();
+      quickAddModal.classList.remove('hidden');
+    });
+
+    document.getElementById('closeQuickAddBtn').addEventListener('click', () => {
+      quickAddModal.classList.add('hidden');
+    });
+
+    function renderCategoryButtons() {
+      const grid = document.getElementById('categoryGrid');
+      grid.innerHTML = '';
+      const list = currentTxType === 'income' ? incomeCategories : expenseCategories;
+      
+      // If current category not in list, pick first
+      if (!list.some(c => c.name === currentSelectedCategory)) {
+        currentSelectedCategory = list[0].name;
+      }
+      document.getElementById('currentSelectedCatName').textContent = `已选: ${currentSelectedCategory}`;
+
+      list.forEach(c => {
+        const btn = document.createElement('button');
+        const isActive = c.name === currentSelectedCategory;
+        btn.type = 'button';
+        btn.className = `cat-btn p-2 rounded-xl text-center flex flex-col items-center transition ${isActive ? 'active bg-slate-800 border border-emerald-500' : 'bg-slate-950 border border-slate-800'}`;
+        btn.innerHTML = `
+          <span class="text-lg">${c.icon}</span>
+          <span class="text-[11px] mt-0.5 ${isActive ? 'text-slate-200 font-bold' : 'text-slate-400'}">${c.name}</span>
+        `;
+        btn.addEventListener('click', () => {
+          currentSelectedCategory = c.name;
+          renderCategoryButtons();
+        });
+        grid.appendChild(btn);
+      });
+    }
+
+    function resetQuickAddForm() {
+      currentInputExpression = '0';
+      document.getElementById('amountDisplay').textContent = '0.00';
+      document.getElementById('merchantInput').value = '';
+      document.getElementById('noteInput').value = '';
+      document.getElementById('reimbursableToggle').checked = false;
+      document.getElementById('selectedTags').value = '';
+      document.querySelectorAll('.tag-pill').forEach(tp => {
+        tp.classList.remove('border-emerald-500', 'text-emerald-400');
+        tp.classList.add('border-slate-800', 'text-slate-400');
+      });
+      // Date default today (local timezone safe)
+      document.getElementById('customTxDate').value = getLocalDateString(new Date());
+
+      // Reset date pills
+      document.querySelectorAll('.date-quick-btn').forEach(b => {
+        b.className = 'date-quick-btn text-xs px-2.5 py-1 rounded-lg bg-slate-800 text-slate-400 font-medium';
+      });
+      const todayPill = document.querySelector('.date-quick-btn[data-days="0"]');
+      if (todayPill) todayPill.className = 'date-quick-btn active text-xs px-2.5 py-1 rounded-lg bg-emerald-500/20 text-emerald-400 font-medium';
+
+      renderCategoryButtons();
+    }
+
+    // Type pills in modal
+    document.querySelectorAll('.type-pill').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.type-pill').forEach(b => {
+          b.className = 'type-pill px-3 py-1 rounded-lg text-xs font-semibold text-slate-400 hover:text-white transition';
+        });
+        btn.className = 'type-pill active px-3 py-1 rounded-lg text-xs font-semibold bg-emerald-500 text-slate-950 transition';
+        currentTxType = btn.dataset.type;
+
+        if (currentTxType === 'transfer') {
+          document.getElementById('categoryPickerContainer').classList.add('hidden');
+          document.getElementById('toAccountWrapper').classList.remove('hidden');
+          document.getElementById('accountFieldLabel').textContent = '转出账户';
+        } else {
+          document.getElementById('categoryPickerContainer').classList.remove('hidden');
+          document.getElementById('toAccountWrapper').classList.add('hidden');
+          document.getElementById('accountFieldLabel').textContent = currentTxType === 'income' ? '入账账户' : '支付/扣款账户';
+          renderCategoryButtons();
+        }
+      });
+    });
+
+    // Quick Merchant Auto-fill Buttons
+    document.querySelectorAll('.quick-merchant-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.getElementById('merchantInput').value = btn.dataset.merchant;
+        currentSelectedCategory = btn.dataset.cat;
+        renderCategoryButtons();
+        showToast(`已自动匹配分类: ${btn.dataset.cat}`);
+      });
+    });
+
+    // Date Quick Pills
+    document.querySelectorAll('.date-quick-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.date-quick-btn').forEach(b => {
+          b.className = 'date-quick-btn text-xs px-2.5 py-1 rounded-lg bg-slate-800 text-slate-400 font-medium';
+        });
+        btn.className = 'date-quick-btn active text-xs px-2.5 py-1 rounded-lg bg-emerald-500/20 text-emerald-400 font-medium';
+        const offset = parseInt(btn.dataset.days);
+        const d = new Date();
+        d.setDate(d.getDate() - offset);
+        document.getElementById('customTxDate').value = getLocalDateString(d);
+      });
+    });
+
+    // Toggle Advanced
+    document.getElementById('toggleAdvancedDetails').addEventListener('click', () => {
+      const adv = document.getElementById('advancedFields');
+      const arrow = document.getElementById('advancedArrow');
+      adv.classList.toggle('hidden');
+      arrow.classList.toggle('rotate-180');
+    });
+
+    // Tag pills
+    document.querySelectorAll('.tag-pill').forEach(btn => {
+      btn.addEventListener('click', () => {
+        btn.classList.toggle('border-emerald-500');
+        btn.classList.toggle('text-emerald-400');
+        const activeTags = [];
+        document.querySelectorAll('.tag-pill.border-emerald-500').forEach(t => activeTags.push(t.dataset.tag));
+        document.getElementById('selectedTags').value = activeTags.join(',');
+      });
+    });
+
+    // Numpad handler function
+    function handleNumpadInput(val, action) {
+      if (val) {
+        if (currentInputExpression === '0' && val !== '.') {
+          currentInputExpression = val;
+        } else {
+          currentInputExpression += val;
+        }
+      } else if (action === 'backspace') {
+        currentInputExpression = currentInputExpression.slice(0, -1);
+        if (!currentInputExpression) currentInputExpression = '0';
+      } else if (action === 'clear') {
+        currentInputExpression = '0';
+      } else if (action === 'done') {
+        submitTransaction();
+        return;
+      }
+
+      try {
+        const cleaned = currentInputExpression.replace(/[^0-9+\-.]/g, '');
+        const res = Function(`'use strict'; return (${cleaned})`)();
+        document.getElementById('amountDisplay').textContent = isNaN(res) ? '0.00' : Number(res).toFixed(2);
+      } catch(e) {
+        document.getElementById('amountDisplay').textContent = currentInputExpression;
+      }
+    }
+
+    document.querySelectorAll('.numpad-key').forEach(btn => {
+      btn.addEventListener('click', () => {
+        handleNumpadInput(btn.dataset.val, btn.dataset.action);
+      });
+    });
+
+    // Support Physical Keyboard Input on Desktop
+    window.addEventListener('keydown', (e) => {
+      if (!quickAddModal.classList.contains('hidden')) {
+        if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
+        if ((e.key >= '0' && e.key <= '9') || e.key === '.' || e.key === '+' || e.key === '-') {
+          e.preventDefault();
+          handleNumpadInput(e.key, null);
+        } else if (e.key === 'Backspace') {
+          e.preventDefault();
+          handleNumpadInput(null, 'backspace');
+        } else if (e.key === 'Enter') {
+          e.preventDefault();
+          submitTransaction();
+        } else if (e.key === 'Escape') {
+          quickAddModal.classList.add('hidden');
+        }
+      }
+    });
+
+    document.getElementById('saveQuickAddBtn').addEventListener('click', submitTransaction);
+
+    function submitTransaction() {
+      let finalAmount = 0;
+      try {
+        finalAmount = Number(Function(`'use strict'; return (${currentInputExpression.replace(/[^0-9+\-.]/g, '')})`)());
+      } catch(e) {
+        finalAmount = parseFloat(currentInputExpression);
+      }
+
+      if (isNaN(finalAmount) || finalAmount <= 0) {
+        showToast('请输入有效金额');
+        return;
+      }
+
+      const accId = parseInt(document.getElementById('accountSelect').value);
+      const merchant = document.getElementById('merchantInput').value.trim();
+      const tags = document.getElementById('selectedTags').value;
+      const isReimbursable = document.getElementById('reimbursableToggle').checked;
+      const note = document.getElementById('noteInput').value.trim();
+      const dateVal = document.getElementById('customTxDate').value || getLocalDateString(new Date());
+
+      // Parse date locally
+      const [pYear, pMonth, pDay] = dateVal.split('-').map(Number);
+      const nowTime = new Date();
+      const txDateObj = new Date(pYear, pMonth - 1, pDay, nowTime.getHours(), nowTime.getMinutes(), nowTime.getSeconds());
+      const txDateIso = txDateObj.toISOString();
+
+      const acc = state.accounts.find(a => a.id === accId);
+
+      const newId = Date.now();
+      if (currentTxType === 'transfer') {
+        const toId = parseInt(document.getElementById('toAccountSelect').value);
+        const toAcc = state.accounts.find(a => a.id === toId);
+        if (accId === toId) {
+          showToast('转出与转入账户不能相同');
+          return;
+        }
+        if (acc && toAcc) {
+          acc.balance -= finalAmount;
+          toAcc.balance += finalAmount;
+          state.transactions.unshift({
+            id: newId,
+            type: 'transfer',
+            amount: finalAmount,
+            accountId: accId,
+            toAccountId: toId,
+            category: '内部转账',
+            merchant: `${acc.name} ➔ ${toAcc.name}`,
+            tags: tags || '转账',
+            isReimbursable: false,
+            reimbursementStatus: 'none',
+            note: note || '转账',
+            date: txDateIso,
+            _isJustAdded: true
+          });
+        }
+      } else {
+        if (acc) {
+          if (currentTxType === 'expense') acc.balance -= finalAmount;
+          else if (currentTxType === 'income') acc.balance += finalAmount;
+
+          state.transactions.unshift({
+            id: newId,
+            type: currentTxType,
+            amount: finalAmount,
+            accountId: accId,
+            category: currentSelectedCategory,
+            merchant: merchant,
+            tags: tags,
+            isReimbursable: isReimbursable,
+            reimbursementStatus: isReimbursable ? 'pending' : 'none',
+            note: note,
+            date: txDateIso,
+            _isJustAdded: true
+          });
+        }
+      }
+
+      // CRITICAL FIX: Automatically synchronize the month view to the newly added transaction's month!
+      isAllTimeMode = false;
+      currentSelectedDate = new Date(pYear, pMonth - 1, 1);
+
+      saveState();
+      quickAddModal.classList.add('hidden');
+      updateMonthDisplay();
+
+      // Switch to Ledger view if not already there
+      const ledgerNav = document.querySelector('.nav-btn[data-view="viewLedger"]');
+      if (ledgerNav) ledgerNav.click();
+
+      showToast(`已成功入账: ${formatRM(finalAmount)} · ${merchant || currentSelectedCategory}`);
+    }
+
+    // --- SETTINGS & BACKUP ---
+    document.getElementById('settingsBtn').addEventListener('click', () => {
+      document.getElementById('settingsModal').classList.remove('hidden');
+    });
+    document.getElementById('closeSettingsBtn').addEventListener('click', () => {
+      document.getElementById('settingsModal').classList.add('hidden');
+    });
+
+    document.getElementById('saveNewPinBtn').addEventListener('click', () => {
+      const newPin = document.getElementById('newPinInput').value.trim();
+      if (newPin && newPin.length === 4 && /^\d+$/.test(newPin)) {
+        userPin = newPin;
+        try { localStorage.setItem(PIN_KEY, newPin); } catch(e){}
+        showToast('PIN 码已成功修改！');
+        document.getElementById('newPinInput').value = '';
+      } else {
+        showToast('PIN 码必须为 4 位纯数字');
+      }
+    });
+
+    // Export JSON Backup
+    document.getElementById('exportBackupBtn').addEventListener('click', () => {
+      const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(state, null, 2));
+      const downloadAnchor = document.createElement('a');
+      downloadAnchor.setAttribute("href", dataStr);
+      downloadAnchor.setAttribute("download", `vault_ledger_backup_${getLocalDateString(new Date())}.json`);
+      document.body.appendChild(downloadAnchor);
+      downloadAnchor.click();
+      downloadAnchor.remove();
+      showToast('备份文件已下载，请妥善保存');
+    });
+
+    // Import JSON Backup
+    document.getElementById('importBackupInput').addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        try {
+          const parsed = JSON.parse(event.target.result);
+          if (parsed.accounts && parsed.transactions) {
+            state = parsed;
+            saveState();
+            showToast('数据恢复成功！');
+            document.getElementById('settingsModal').classList.add('hidden');
+          } else {
+            showToast('备份文件格式不正确');
+          }
+        } catch(err) {
+          showToast('解析备份文件失败');
+        }
+      };
+      reader.readAsText(file);
+    });
+
+    // Export CSV
+    document.getElementById('exportCsvBtn').addEventListener('click', () => {
+      let csv = "ID,Type,Amount (RM),Category,Merchant,Account,Date,Tags,Reimbursable,Note\n";
+      state.transactions.forEach(t => {
+        const acc = state.accounts.find(a => a.id === t.accountId) || { name: '' };
+        csv += `"${t.id}","${t.type}","${t.amount}","${t.category}","${t.merchant || ''}","${acc.name}","${t.date}","${t.tags || ''}","${t.isReimbursable ? 'Yes' : 'No'}","${t.note || ''}"\n`;
+      });
+      const blob = new Blob(["\ufeff" + csv], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `transactions_${getLocalDateString(new Date())}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      showToast('CSV 表格已导出');
+    });
+
+    // Reset Sample Data
+    document.getElementById('resetSampleDataBtn').addEventListener('click', () => {
+      state = createInitialSeedData();
+      currentSelectedDate = new Date();
+      isAllTimeMode = false;
+      saveState();
+      updateMonthDisplay();
+      showToast('已重置为当前月份示例账本');
+      document.getElementById('settingsModal').classList.add('hidden');
+    });
+
+    // --- GLOBAL RENDER ALL ---
+    function renderAll() {
+      renderLedger();
+      renderAccounts();
+      renderDebt();
+    }
+
+    // Initial Execution
+    updateMonthDisplay();
+    updatePinDots();
+  </script>
+</body>
+</html>
